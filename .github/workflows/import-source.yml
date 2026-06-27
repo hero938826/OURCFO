@@ -1,0 +1,80 @@
+name: Import OurCFO source
+
+on:
+  push:
+    paths:
+      - .github/workflows/import-source.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  import-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download prepared source archive
+        run: |
+          curl -fsSL https://wooer-home-wealth-dashboard.vercel.app/source.zip -o /tmp/ourcfo-source.zip
+
+      - name: Expand source archive
+        run: |
+          python - <<'PY'
+          import zipfile
+          with zipfile.ZipFile('/tmp/ourcfo-source.zip') as archive:
+              archive.extractall('.')
+          PY
+
+      - name: Remove temporary handoff files
+        run: |
+          rm -rf .github/source
+          rm -f .github/workflows/import-source.yml
+          cat > scripts/build-static.cjs <<'EOF'
+          const fs = require("node:fs/promises");
+          const path = require("node:path");
+
+          const root = path.resolve(__dirname, "..");
+          const output = path.join(root, "public");
+          const staticFiles = ["index.html", "styles.css", "app.js"];
+
+          async function build() {
+            await fs.rm(output, { recursive: true, force: true });
+            await fs.mkdir(output, { recursive: true });
+
+            await Promise.all(
+              staticFiles.map((file) => fs.copyFile(path.join(root, file), path.join(output, file)))
+            );
+
+            console.log(`OurCFO static build ready: ${staticFiles.length} files copied to public/`);
+          }
+
+          build().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          EOF
+          cat > .gitignore <<'EOF'
+          .vercel
+          .vercel-home
+          .vercel-device.json
+          .env
+          .env.*
+          !.env.example
+          node_modules
+          .pnpm-store
+          public
+          .dev-server.*.log
+          .vercel-login.*
+          *.local
+          *.log
+          EOF
+
+      - name: Commit imported source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Import OurCFO production source" || exit 0
+          git push
