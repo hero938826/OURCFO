@@ -9,6 +9,7 @@
 !.env.example
 .vercel-login.*
 .dev-server.*.log
+backups/
 node_modules
 scripts/vercel-preview-deploy.mjs
 scripts/vercel-device-start.mjs
