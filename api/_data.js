@@ -1,3 +1,6 @@
+const fs = require("node:fs");
+const path = require("node:path");
+
 const DEFAULT_STATE = {
   ledgerEntries: [],
   stockHoldings: [],
@@ -65,7 +68,7 @@ async function loadState() {
 
 function currentSource() {
   if (usesSupabase()) return "supabase";
-  if (process.env.OURCFO_INITIAL_DATA || process.env.OURCFO_INITIAL_DATA_BASE64) return "seed";
+  if (process.env.OURCFO_INITIAL_DATA || process.env.OURCFO_INITIAL_DATA_BASE64 || seedFilePath()) return "seed";
   return "empty";
 }
 
@@ -76,12 +79,37 @@ function usesSupabase() {
 function loadSeedState() {
   const base64 = process.env.OURCFO_INITIAL_DATA_BASE64;
   const raw = base64 ? Buffer.from(base64, "base64").toString("utf8") : process.env.OURCFO_INITIAL_DATA;
-  if (!raw) return DEFAULT_STATE;
+
+  if (raw) {
+    try {
+      return JSON.parse(raw);
+    } catch (error) {
+      const fileState = loadSeedFile();
+      if (fileState) return fileState;
+      throw new Error("OURCFO_INITIAL_DATA is not valid JSON");
+    }
+  }
+
+  return loadSeedFile() || DEFAULT_STATE;
+}
+
+function seedFilePath() {
+  const candidates = [
+    process.env.OURCFO_SEED_FILE,
+    path.join(__dirname, "..", "data", "ourcfo-seed.json")
+  ].filter(Boolean);
+
+  return candidates.find((candidate) => fs.existsSync(candidate));
+}
+
+function loadSeedFile() {
+  const filePath = seedFilePath();
+  if (!filePath) return null;
 
   try {
-    return JSON.parse(raw);
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
   } catch (error) {
-    throw new Error("OURCFO_INITIAL_DATA is not valid JSON");
+    throw new Error("OurCFO seed file is not valid JSON");
   }
 }
 
