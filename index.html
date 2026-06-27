@@ -1,0 +1,899 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>우리집 자산 대시보드</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="access-locked">
+    <div class="access-gate" id="accessGate">
+      <form class="access-card" id="accessForm">
+        <div class="access-emoji" aria-hidden="true">🚀</div>
+        <span class="section-kicker">Private Dashboard</span>
+        <h1>우리집 자산현황</h1>
+        <p>암호를 입력하면 대시보드가 열려요.</p>
+        <label>
+          <span>암호</span>
+          <input id="accessPin" type="password" inputmode="numeric" maxlength="4" autocomplete="current-password" required autofocus />
+        </label>
+        <button type="submit" class="text-button primary">들어가기</button>
+        <small id="accessError" role="alert"></small>
+      </form>
+    </div>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="주요 메뉴">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">🚀</div>
+          <div>
+            <strong>우리집 자산현황</strong>
+            <span>가족 재무 대시보드</span>
+          </div>
+        </div>
+
+        <nav class="nav-list" aria-label="화면 이동">
+          <button class="nav-item active" data-view-target="home">
+            <span class="nav-icon" aria-hidden="true">🏠</span>
+            <span class="nav-label" data-ui-label="tabHome">홈</span>
+          </button>
+          <button class="nav-item" data-view-target="ledger">
+            <span class="nav-icon" aria-hidden="true">📒</span>
+            <span class="nav-label" data-ui-label="tabLedger">가계부</span>
+          </button>
+          <button class="nav-item" data-view-target="stocks">
+            <span class="nav-icon" aria-hidden="true">📈</span>
+            <span class="nav-label" data-ui-label="tabStocks">주식</span>
+          </button>
+          <button class="nav-item" data-view-target="assets">
+            <span class="nav-icon" aria-hidden="true">💼</span>
+            <span class="nav-label" data-ui-label="tabAssets">자산현황</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <span id="dataUpdatedAt">내 데이터는 이 기기에 저장돼요</span>
+          <div class="sidebar-actions">
+            <button class="quiet-button" id="downloadBtn">내보내기</button>
+            <label class="quiet-button file-button">
+              가져오기
+              <input type="file" id="uploadInput" accept="application/json" />
+            </label>
+          </div>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow" id="pageEyebrow">우리집 자산</p>
+            <h1 id="pageTitle">홈</h1>
+          </div>
+          <div class="topbar-status">
+            <span class="live-dot" aria-hidden="true"></span>
+            <span id="marketStatus">시장 데이터 불러오는 중</span>
+          </div>
+        </header>
+
+        <section class="view active" data-view="home" aria-labelledby="homeTitle">
+          <div class="home-hero">
+            <div>
+              <div class="hero-label">
+                <span>우리집 순자산</span>
+                <button class="info-button" title="메리츠W 계좌는 합계에서 제외됩니다" aria-label="합산 기준 안내">i</button>
+              </div>
+              <strong id="homeNetWorth">-</strong>
+              <p id="homeNetWorthCaption">부동산과 금융자산에서 부채를 뺀 금액</p>
+            </div>
+            <div class="home-switches">
+              <label class="theme-switch" title="다크 모드">
+                <input type="checkbox" id="themeToggle" />
+                <span class="switch-track"><span class="switch-thumb"></span></span>
+                <span>다크 모드</span>
+              </label>
+              <label class="theme-switch" title="탭 이름과 차트 순서 편집">
+                <input type="checkbox" id="layoutEditToggle" />
+                <span class="switch-track"><span class="switch-thumb"></span></span>
+                <span id="layoutEditLabel">화면 편집 잠금</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="summary-strip">
+            <article>
+              <i class="summary-emoji" aria-hidden="true">🏠</i>
+              <span>부동산</span>
+              <strong id="homeRealEstate">-</strong>
+            </article>
+            <article>
+              <i class="summary-emoji" aria-hidden="true">💳</i>
+              <span>금융자산</span>
+              <strong id="homeFinancial">-</strong>
+            </article>
+            <article>
+              <i class="summary-emoji" aria-hidden="true">📉</i>
+              <span>부채</span>
+              <strong id="homeDebt">-</strong>
+            </article>
+            <article class="separate-summary">
+              <i class="summary-emoji" aria-hidden="true">🧊</i>
+              <span>메리츠W 별도</span>
+              <strong id="homeMeritzW">-</strong>
+            </article>
+          </div>
+
+          <article class="surface management-surface">
+            <div class="section-heading compact">
+              <div>
+                <span class="section-kicker">Monthly Control</span>
+                <h2>이번 달 핵심 관리</h2>
+              </div>
+              <span class="status-badge" id="monthlyCloseStatus">마감 전</span>
+            </div>
+            <div class="management-kpi-grid">
+              <div class="management-kpi" id="kpiNetWorthCard">
+                <span>순자산</span><strong id="kpiNetWorth">-</strong><small id="kpiNetWorthCompare">-</small>
+              </div>
+              <div class="management-kpi" id="kpiSavingCard">
+                <span>저축률</span><strong id="kpiSavingRate">-</strong><small id="kpiSavingCompare">-</small>
+              </div>
+              <div class="management-kpi" id="kpiBudgetCard">
+                <span>예산 소진률</span><strong id="kpiBudgetRate">-</strong><small id="kpiBudgetCompare">-</small>
+              </div>
+              <div class="management-kpi" id="kpiInvestmentCard">
+                <span>투자수익률</span><strong id="kpiInvestmentReturn">-</strong>
+                <small id="kpiInvestmentDetail">-</small><small id="kpiInvestmentCompare">-</small>
+              </div>
+            </div>
+            <div class="monthly-close-toolbar">
+              <div><strong id="monthlyCloseMonth">-</strong><span id="monthlyCloseCaption">현재 데이터로 계산 중</span></div>
+              <div class="page-actions">
+                <button class="text-button primary" id="closeCurrentMonthBtn">이번 달 마감</button>
+                <button class="text-button secondary" id="editMonthlyCloseBtn" disabled>마감값 수정</button>
+                <button class="text-button secondary" id="reapplyMonthlyCloseBtn" disabled>현재 데이터 재반영</button>
+              </div>
+            </div>
+          </article>
+
+          <article class="surface layout-editor" id="layoutEditorPanel" hidden>
+            <div class="section-heading compact">
+              <div>
+                <span class="section-kicker">Layout Editor</span>
+                <h2>화면 이름과 차트 순서</h2>
+              </div>
+              <span class="status-badge">변경 가능</span>
+            </div>
+            <div class="layout-editor-grid">
+              <div>
+                <h3>이름 변경</h3>
+                <div class="layout-label-list" id="layoutLabelEditor"></div>
+              </div>
+              <div>
+                <h3>차트 순서</h3>
+                <div class="layout-order-list" id="layoutOrderEditor"></div>
+              </div>
+            </div>
+          </article>
+
+          <div class="home-grid">
+            <article class="surface goal-surface">
+              <div class="section-heading compact">
+                <div>
+                  <span class="section-kicker">Financial Goal</span>
+                  <h2 data-ui-label="homeGoalTitle">기간 대비 금융자산 목표</h2>
+                </div>
+                <button class="text-button secondary" id="openGoalModalBtn">목표 수정</button>
+              </div>
+              <div class="goal-gauge-list">
+                <div class="goal-gauge">
+                  <div class="goal-gauge-head">
+                    <span>목표 금액 달성</span>
+                    <strong id="financialGoalProgress">-</strong>
+                  </div>
+                  <div class="progress-track large"><div class="progress-bar" id="financialGoalBar"></div></div>
+                  <p id="financialGoalAmount">-</p>
+                </div>
+                <div class="goal-gauge">
+                  <div class="goal-gauge-head">
+                    <span>남은 기간</span>
+                    <strong id="financialGoalPeriod">-</strong>
+                  </div>
+                  <div class="progress-track large"><div class="progress-bar period-bar" id="financialPeriodBar"></div></div>
+                  <p id="financialGoalRemaining">-</p>
+                </div>
+              </div>
+              <p class="goal-pace" id="financialGoalPace">-</p>
+            </article>
+
+            <article class="surface monthly-surface">
+              <div class="section-heading compact">
+                <div>
+                  <span class="section-kicker">This Month</span>
+                  <h2 data-ui-label="homeCashTitle">이번 달 현금흐름</h2>
+                </div>
+                <button class="emoji-button" data-view-link="ledger" title="가계부 보기" aria-label="가계부 보기">📒</button>
+              </div>
+              <div class="cash-summary">
+                <div><span>수입</span><strong id="homeIncome">-</strong></div>
+                <div><span>지출</span><strong id="homeExpense">-</strong></div>
+                <div><span>남은 금액</span><strong id="homeBalance">-</strong></div>
+              </div>
+            </article>
+          </div>
+
+          <section class="dashboard-section" data-layout-group="homeCharts" data-layout-id="markets">
+            <div class="section-heading">
+              <div>
+                <span class="section-kicker">Markets</span>
+                <h2 id="homeTitle" data-ui-label="homeMarketsTitle">시장 한눈에 보기</h2>
+              </div>
+              <span class="updated-label" id="marketUpdatedAt">-</span>
+            </div>
+            <div class="market-grid" id="marketGrid"></div>
+          </section>
+
+          <section class="dashboard-section" data-layout-group="homeCharts" data-layout-id="watch">
+            <div class="section-heading">
+              <div>
+                <span class="section-kicker">US ETFs</span>
+                <h2 data-ui-label="homeWatchTitle">관심 종목 가격</h2>
+              </div>
+              <span class="updated-label">USD 기준</span>
+            </div>
+            <div class="quote-grid" id="watchQuoteGrid"></div>
+          </section>
+        </section>
+
+        <section class="view" data-view="ledger" aria-labelledby="ledgerTitle">
+          <div class="section-heading page-heading">
+            <div>
+              <span class="section-kicker">Household Ledger</span>
+              <h2 id="ledgerTitle" data-ui-label="ledgerPageTitle">가계부</h2>
+            </div>
+            <button class="text-button primary" id="openLedgerModalBtn">내역 추가</button>
+          </div>
+
+          <div class="metric-grid five">
+            <article class="metric-card">
+              <span class="metric-emoji" aria-hidden="true">💰</span><span>TOTAL INCOME</span>
+              <strong id="ledgerIncome">-</strong>
+              <small id="ledgerIncomeCount">-</small>
+            </article>
+            <article class="metric-card">
+              <span class="metric-emoji" aria-hidden="true">🧾</span><span>TOTAL EXPENSE</span>
+              <strong id="ledgerExpense">-</strong>
+              <small id="ledgerExpenseRate">-</small>
+            </article>
+            <article class="metric-card">
+              <span class="metric-emoji" aria-hidden="true">🏦</span><span>SAVINGS</span>
+              <strong id="ledgerSaving">-</strong>
+              <small id="ledgerSavingRate">-</small>
+            </article>
+            <article class="metric-card">
+              <span class="metric-emoji" aria-hidden="true">🪙</span><span>BALANCE</span>
+              <strong id="ledgerBalance">-</strong>
+              <small>수입 - 지출 - 저축</small>
+            </article>
+            <article class="metric-card accent">
+              <span class="metric-emoji" aria-hidden="true">📊</span><span>SPENDING RATE</span>
+              <strong id="ledgerSpendRate">-</strong>
+              <small>수입 대비 지출</small>
+            </article>
+          </div>
+
+          <div class="ledger-chart-grid">
+            <article class="surface chart-surface wide-chart" data-layout-group="ledgerCharts" data-layout-id="recent6">
+              <div class="section-heading compact">
+                <div>
+                  <span class="section-kicker">Monthly Flow</span>
+                  <h2 data-ui-label="ledgerRecentTitle">최근 6개월 수입·지출</h2>
+                </div>
+              </div>
+              <canvas id="ledgerTrendChart" height="260" aria-label="월별 수입과 지출 차트"></canvas>
+            </article>
+            <article class="surface chart-surface wide-chart" data-layout-group="ledgerCharts" data-layout-id="ytd">
+              <div class="section-heading compact">
+                <div>
+                  <span class="section-kicker">Year To Date</span>
+                  <h2 data-ui-label="ledgerYtdTitle">당해 연도 누적</h2>
+                </div>
+              </div>
+              <canvas id="ledgerYtdChart" height="260" aria-label="당해 연도 누적 수입 지출 저축 차트"></canvas>
+            </article>
+            <article class="surface chart-surface" data-layout-group="ledgerCharts" data-layout-id="fixed">
+              <div class="section-heading compact">
+                <div>
+                  <span class="section-kicker">Fixed Expense</span>
+                  <h2 data-ui-label="ledgerFixedTitle">고정지출 분류</h2>
+                </div>
+              </div>
+              <div class="donut-layout">
+                <canvas id="fixedExpenseDonut" width="220" height="220" aria-label="고정지출 분류 비중"></canvas>
+                <div class="chart-legend" id="fixedExpenseLegend"></div>
+              </div>
+            </article>
+            <article class="surface chart-surface" data-layout-group="ledgerCharts" data-layout-id="variable">
+              <div class="section-heading compact">
+                <div>
+                  <span class="section-kicker">Variable Expense</span>
+                  <h2 data-ui-label="ledgerVariableTitle">변동지출 분류</h2>
+                </div>
+              </div>
+              <div class="budget-panel" id="variableBudgetPanel">
+                <div class="budget-heading">
+                  <div>
+                    <span>월 변동지출 예산</span>
+                    <strong id="variableBudgetStatus">예산을 설정해 주세요</strong>
+                  </div>
+                  <div class="budget-input-group">
+                    <input id="variableBudgetInput" type="text" inputmode="numeric" autocomplete="off" aria-label="월 변동지출 예산" />
+                    <button class="text-button secondary compact-button" id="saveVariableBudgetBtn">저장</button>
+                  </div>
+                </div>
+                <div class="progress-track budget-track"><div class="progress-bar" id="variableBudgetBar"></div></div>
+                <div class="budget-meta">
+                  <span id="variableBudgetSpent">-</span>
+                  <span id="variableBudgetPace">-</span>
+                </div>
+              </div>
+              <div class="donut-layout">
+                <canvas id="variableExpenseDonut" width="220" height="220" aria-label="변동지출 분류 비중"></canvas>
+                <div class="chart-legend" id="variableExpenseLegend"></div>
+              </div>
+            </article>
+            <article class="surface chart-surface" data-layout-group="ledgerCharts" data-layout-id="savings">
+              <div class="section-heading compact">
+                <div>
+                  <span class="section-kicker">Savings Rate</span>
+                  <h2 data-ui-label="ledgerSavingsTitle">수입 대비 저축</h2>
+                </div>
+              </div>
+              <div class="donut-layout">
+                <canvas id="savingsDonut" width="220" height="220" aria-label="수입 대비 저축 비중"></canvas>
+                <div class="chart-legend" id="savingsLegend"></div>
+              </div>
+            </article>
+          </div>
+
+          <article class="surface table-surface">
+            <div class="table-toolbar">
+              <div class="ledger-filter-group">
+                <label class="month-filter-control">
+                  <span>조회 월</span>
+                  <select id="ledgerMonthFilter" aria-label="가계부 조회 월"></select>
+                </label>
+                <div class="segmented-control" aria-label="가계부 필터">
+                  <button class="active" data-ledger-filter="all">전체</button>
+                  <button data-ledger-filter="수입">수입</button>
+                  <button data-ledger-filter="지출(고정)">고정지출</button>
+                  <button data-ledger-filter="지출(변동)">변동지출</button>
+                  <button data-ledger-filter="저축">저축</button>
+                </div>
+              </div>
+              <div class="table-actions">
+                <span id="ledgerCount" class="table-count">-</span>
+                <button class="text-button secondary compact-button" id="copyFixedToNextMonthBtn">다음달 고정지출 복사</button>
+                <button class="text-button danger compact-button" id="deleteSelectedLedgerBtn" disabled>선택 삭제</button>
+                <button class="lock-button" id="ledgerEditToggle" aria-pressed="false">수정 잠금</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th class="select-cell"><input type="checkbox" id="selectAllLedger" aria-label="전체 선택" /></th>
+                    <th>날짜</th>
+                    <th>구분</th>
+                    <th>분류</th>
+                    <th class="number-cell">금액</th>
+                    <th>결제수단</th>
+                    <th>메모</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="ledgerTableBody"></tbody>
+              </table>
+            </div>
+            <nav class="pagination" id="ledgerPagination" aria-label="가계부 페이지"></nav>
+          </article>
+        </section>
+
+        <section class="view" data-view="stocks" aria-labelledby="stocksTitle">
+          <div class="section-heading page-heading">
+            <div>
+              <span class="section-kicker">Stock Portfolio</span>
+              <h2 id="stocksTitle" data-ui-label="stocksPageTitle">주식 포트폴리오</h2>
+            </div>
+            <div class="page-actions">
+              <button class="text-button secondary" id="openStockModalBtn">초기 잔고</button>
+              <button class="text-button primary" id="openTradeModalBtn">매매 기록</button>
+            </div>
+          </div>
+
+          <article class="surface treemap-surface">
+            <div class="section-heading compact">
+              <div>
+                <span class="section-kicker">Today's Move</span>
+                <h2 data-ui-label="stockTreemapTitle">보유 종목 당일 등락</h2>
+              </div>
+              <span class="chart-caption">Yahoo Finance 기준</span>
+            </div>
+            <div class="stock-treemap" id="stockTreemap" aria-label="보유 종목 당일 등락률 트리맵"></div>
+          </article>
+
+          <div class="metric-grid four">
+            <article class="metric-card infographic-card" data-emoji="💼">
+              <span>주식 자산가치</span>
+              <strong id="stockTotalValue">-</strong>
+              <small id="stockTotalUsd">-</small>
+            </article>
+            <article class="metric-card infographic-card" data-emoji="📈">
+              <span>총 수익금</span>
+              <strong id="stockTotalProfit">-</strong>
+              <small id="stockTotalReturn">-</small>
+            </article>
+            <article class="metric-card infographic-card" data-emoji="💵">
+              <span>연 예상 배당</span>
+              <strong id="stockAnnualDividend">-</strong>
+              <small id="stockDividendYield">-</small>
+            </article>
+            <article class="metric-card separate-summary infographic-card" data-emoji="🧊">
+              <span>메리츠W 별도 자산</span>
+              <strong id="stockMeritzWValue">-</strong>
+              <small>전체 합계에서 제외</small>
+            </article>
+          </div>
+
+          <article class="surface chart-surface wide-chart stock-growth-surface">
+            <div class="section-heading compact">
+              <div>
+                <span class="section-kicker">Portfolio Growth</span>
+                <h2 data-ui-label="stockGrowthTitle">주식 자산가치 월 누적</h2>
+              </div>
+              <span class="chart-caption">2026년 6월부터</span>
+            </div>
+            <canvas id="stockGrowthChart" height="270" aria-label="주식 자산가치 월 누적 성장 추이"></canvas>
+          </article>
+
+          <div class="analytics-grid two stock-allocation-stack">
+            <article class="surface chart-surface" data-layout-group="stockCharts" data-layout-id="sector">
+              <div class="section-heading compact">
+                <div>
+                  <span class="section-kicker">Sector Mix</span>
+                  <h2 data-ui-label="stockSectorTitle">섹터별 비중</h2>
+                </div>
+              </div>
+              <div class="donut-layout">
+                <canvas id="sectorDonut" width="220" height="220" aria-label="섹터별 주식 비중"></canvas>
+                <div class="chart-legend" id="sectorLegend"></div>
+              </div>
+            </article>
+            <article class="surface chart-surface account-allocation-surface" data-layout-group="stockCharts" data-layout-id="account">
+              <div class="section-heading compact">
+                <div>
+                  <span class="section-kicker">Account Mix</span>
+                  <h2 data-ui-label="stockAccountTitle">계좌별 종목 비중</h2>
+                </div>
+              </div>
+              <div class="account-allocation-grid" id="accountAllocationGrid"></div>
+            </article>
+          </div>
+
+          <article class="surface table-surface">
+            <div class="table-toolbar">
+              <div>
+                <strong class="toolbar-title">보유 종목</strong>
+                <span class="table-count" id="stockCount">-</span>
+              </div>
+              <div class="table-actions stock-toolbar-actions">
+                <span class="fx-rate" id="stockFxRate">적용 환율 -</span>
+                <label class="sort-control">
+                  <span>정렬</span>
+                  <select id="stockSort">
+                  <option value="added">입력순</option>
+                  <option value="name">이름순</option>
+                  <option value="return">수익률순</option>
+                  <option value="profit">수익금순</option>
+                  <option value="value">자산가치순</option>
+                  </select>
+                </label>
+                <button class="lock-button" id="stockEditToggle" aria-pressed="false">수정 잠금</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table class="stock-table">
+                <thead>
+                  <tr>
+                    <th>티커</th>
+                    <th>계좌</th>
+                    <th class="number-cell">보유수량</th>
+                    <th class="number-cell">구매가</th>
+                    <th class="number-cell">현재가</th>
+                    <th class="number-cell">자산가치</th>
+                    <th class="number-cell">수익률</th>
+                    <th class="number-cell">수익금</th>
+                    <th>배당월</th>
+                    <th class="number-cell">투자배당률</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="stockTableBody"></tbody>
+              </table>
+            </div>
+            <nav class="pagination" id="stockPagination" aria-label="보유 종목 페이지"></nav>
+          </article>
+
+          <article class="surface table-surface trade-history-surface">
+            <div class="table-toolbar">
+              <div>
+                <strong class="toolbar-title">매매 기록</strong>
+                <span class="table-count" id="tradeCount">-</span>
+              </div>
+              <span class="chart-caption">최근 거래일 순</span>
+            </div>
+            <div class="table-wrap">
+              <table class="trade-table">
+                <thead>
+                  <tr>
+                    <th>거래일</th><th>구분</th><th>티커</th><th>계좌</th><th class="number-cell">수량</th>
+                    <th class="number-cell">체결가</th><th class="number-cell">거래금액</th><th class="number-cell">실현손익</th><th>메모</th>
+                  </tr>
+                </thead>
+                <tbody id="tradeTableBody"></tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="surface separate-account">
+            <div class="section-heading compact">
+              <div>
+                <span class="section-kicker">Separate Account</span>
+                <h2 data-ui-label="stockSeparateTitle">메리츠W 계좌</h2>
+              </div>
+              <span class="status-badge">합산 제외</span>
+            </div>
+            <div id="meritzWList" class="separate-list"></div>
+            <div class="meritz-table-block">
+              <div class="table-toolbar compact-toolbar">
+                <strong class="toolbar-title">메리츠W 보유 종목</strong>
+                <span class="table-count" id="meritzWCount">-</span>
+              </div>
+              <div class="table-wrap">
+                <table class="stock-table">
+                  <thead>
+                    <tr>
+                      <th>티커</th><th>계좌</th><th class="number-cell">보유수량</th><th class="number-cell">구매가</th>
+                      <th class="number-cell">현재가</th><th class="number-cell">자산가치</th><th class="number-cell">수익률</th>
+                      <th class="number-cell">수익금</th><th>배당월</th><th class="number-cell">투자배당률</th><th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="meritzWTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="separate-growth-chart">
+              <div class="section-heading compact">
+                <div>
+                  <span class="section-kicker">Separate Growth</span>
+                  <h3 data-ui-label="stockSeparateGrowthTitle">메리츠W 월 누적</h3>
+                </div>
+                <span class="chart-caption">거래일 기준 · 2026년 6월부터</span>
+              </div>
+              <canvas id="meritzWGrowthChart" height="240" aria-label="메리츠W 월 누적 성장 추이"></canvas>
+            </div>
+          </article>
+        </section>
+
+        <section class="view" data-view="assets" aria-labelledby="assetsTitle">
+          <div class="section-heading page-heading">
+            <div>
+              <span class="section-kicker">Asset Position</span>
+              <h2 id="assetsTitle" data-ui-label="assetsPageTitle">자산현황</h2>
+            </div>
+            <button class="text-button primary" id="openAssetModalBtn">자산 추가</button>
+          </div>
+
+          <div class="metric-grid four">
+            <article class="metric-card">
+              <span class="metric-emoji" aria-hidden="true">✨</span><span>순자산</span>
+              <strong id="assetNetWorth">-</strong>
+              <small>메리츠W 제외</small>
+            </article>
+            <article class="metric-card">
+              <span class="metric-emoji" aria-hidden="true">🏠</span><span>부동산</span>
+              <strong id="assetRealEstate">-</strong>
+              <small id="assetRealEstateRatio">-</small>
+            </article>
+            <article class="metric-card">
+              <span class="metric-emoji" aria-hidden="true">💳</span><span>금융자산</span>
+              <strong id="assetFinancial">-</strong>
+              <small id="assetFinancialRatio">-</small>
+            </article>
+            <article class="metric-card">
+              <span class="metric-emoji" aria-hidden="true">🚗</span><span>차량</span>
+              <strong id="assetVehicle">-</strong>
+              <small id="assetVehicleRatio">-</small>
+            </article>
+            <article class="metric-card debt-card">
+              <span class="metric-emoji" aria-hidden="true">📉</span><span>부채</span>
+              <strong id="assetDebt">-</strong>
+              <small id="assetDebtRatio">-</small>
+            </article>
+          </div>
+
+          <div class="analytics-grid">
+            <article class="surface chart-surface" data-layout-group="assetCharts" data-layout-id="allocation">
+              <div class="section-heading compact">
+                <div>
+                  <span class="section-kicker">Allocation</span>
+                  <h2 data-ui-label="assetAllocationTitle">자산 비중</h2>
+                </div>
+              </div>
+              <div class="donut-layout">
+                <canvas id="assetDonut" width="220" height="220" aria-label="자산 비중"></canvas>
+                <div class="chart-legend" id="assetLegend"></div>
+              </div>
+            </article>
+            <article class="surface chart-surface wide-chart" data-layout-group="assetCharts" data-layout-id="history">
+              <div class="section-heading compact">
+                <div>
+                  <span class="section-kicker">History</span>
+                  <h2 data-ui-label="assetHistoryTitle">자산 추이</h2>
+                </div>
+                <div class="segmented-control compact-control">
+                  <button class="active" data-history-mode="monthly">월별</button>
+                  <button data-history-mode="yearly">연도별</button>
+                </div>
+              </div>
+              <canvas id="assetTrendChart" height="270" aria-label="자산 월별 연도별 추이"></canvas>
+            </article>
+          </div>
+
+          <article class="surface table-surface">
+            <div class="table-toolbar">
+              <strong class="toolbar-title">자산 상세</strong>
+              <div class="table-actions">
+                <span class="table-count" id="assetItemCount">-</span>
+                <button class="lock-button" id="assetEditToggle" aria-pressed="false">수정 잠금</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>기준월</th>
+                    <th>구분</th>
+                    <th>항목</th>
+                    <th class="number-cell">금액</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="assetTableBody"></tbody>
+              </table>
+            </div>
+            <nav class="pagination" id="assetPagination" aria-label="자산 상세 페이지"></nav>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <div class="modal-backdrop" id="ledgerModal" aria-hidden="true">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="ledgerModalTitle">
+        <div class="modal-heading">
+          <div>
+            <span class="section-kicker">New Entry</span>
+            <h2 id="ledgerModalTitle">가계부 내역 추가</h2>
+          </div>
+          <button class="close-button" data-close-modal="ledgerModal" aria-label="닫기">×</button>
+        </div>
+        <form id="ledgerForm" class="form-grid">
+          <label><span>날짜</span><input name="date" type="date" required /></label>
+          <label>
+            <span>구분</span>
+            <select name="type" required>
+              <option value="수입">수입</option>
+              <option value="지출(고정)">지출(고정)</option>
+              <option value="지출(변동)">지출(변동)</option>
+              <option value="저축">저축</option>
+            </select>
+          </label>
+          <label><span class="field-label-row">분류 <button type="button" class="inline-manage-button" data-open-option-manager="ledger">항목 관리</button></span><input name="category" list="ledgerCategoryList" required /></label>
+          <label><span>금액</span><input name="amount" class="krw-input" type="text" inputmode="numeric" autocomplete="off" required /></label>
+          <label><span>결제수단</span><input name="payment" list="ledgerPaymentList" /></label>
+          <label><span>메모</span><input name="memo" /></label>
+          <div class="modal-actions">
+            <button type="button" class="text-button secondary" data-close-modal="ledgerModal">취소</button>
+            <button type="submit" class="text-button primary">저장</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="stockModal" aria-hidden="true">
+      <div class="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="stockModalTitle">
+        <div class="modal-heading">
+          <div>
+            <span class="section-kicker">New Holding</span>
+            <h2 id="stockModalTitle">주식 종목 추가</h2>
+          </div>
+          <button class="close-button" data-close-modal="stockModal" aria-label="닫기">×</button>
+        </div>
+        <form id="stockForm" class="form-grid">
+          <label>
+            <span>거래 국가</span>
+            <select name="country" required>
+              <option value="US">🇺🇸 미국</option>
+              <option value="KR">🇰🇷 한국</option>
+            </select>
+          </label>
+          <label>
+            <span>주식 티커</span>
+            <input name="ticker" placeholder="예: QQQ, 005930.KS" maxlength="16" autocomplete="off" required />
+          </label>
+          <label><span>보유수량</span><input name="quantity" type="number" min="0" step="0.0001" required /></label>
+          <label><span>구매가 (현지 통화)</span><input name="purchasePrice" type="number" min="0" step="0.01" required /></label>
+          <label>
+            <span class="field-label-row">계좌 <button type="button" class="inline-manage-button" data-open-option-manager="stocks">항목 관리</button></span>
+            <select name="account" data-account-select required>
+              <option value="카카오연금">카카오연금</option>
+              <option value="미래에셋ISA">미래에셋ISA</option>
+              <option value="메리츠M">메리츠M</option>
+              <option value="메리츠W">메리츠W</option>
+            </select>
+          </label>
+          <div class="form-note">한국 종목은 Yahoo 티커 형식(.KS 또는 .KQ)으로 입력해 주세요.</div>
+          <div class="modal-actions">
+            <button type="button" class="text-button secondary" data-close-modal="stockModal">취소</button>
+            <button type="submit" class="text-button primary">추가</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="tradeModal" aria-hidden="true">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="tradeModalTitle">
+        <div class="modal-heading">
+          <div>
+            <span class="section-kicker">Stock Transaction</span>
+            <h2 id="tradeModalTitle">주식 매매 기록</h2>
+          </div>
+          <button class="close-button" data-close-modal="tradeModal" aria-label="닫기">×</button>
+        </div>
+        <form id="tradeForm" class="form-grid">
+          <label><span>거래일</span><input name="date" type="date" required /></label>
+          <label>
+            <span>거래 구분</span>
+            <select name="type" required><option value="buy">매수</option><option value="sell">매도</option></select>
+          </label>
+          <label>
+            <span>거래 국가</span>
+            <select name="country" required><option value="US">🇺🇸 미국</option><option value="KR">🇰🇷 한국</option></select>
+          </label>
+          <label><span>티커</span><input name="ticker" list="heldTickerList" placeholder="예: QQQ, 005930.KS" maxlength="16" autocomplete="off" required /></label>
+          <label>
+            <span class="field-label-row">계좌 <button type="button" class="inline-manage-button" data-open-option-manager="stocks">항목 관리</button></span>
+            <select name="account" data-account-select required>
+              <option value="카카오연금">카카오연금</option><option value="미래에셋ISA">미래에셋ISA</option>
+              <option value="메리츠M">메리츠M</option><option value="메리츠W">메리츠W</option>
+            </select>
+          </label>
+          <label><span>수량</span><input name="quantity" type="number" min="0.0001" step="0.0001" required /></label>
+          <label><span>체결가 (현지 통화)</span><input name="price" type="number" min="0" step="0.01" required /></label>
+          <label><span>메모</span><input name="memo" placeholder="선택 입력" /></label>
+          <div class="form-note">매수는 평균단가를 다시 계산하고, 매도는 보유수량과 실현손익을 자동 반영합니다.</div>
+          <div class="modal-actions">
+            <button type="button" class="text-button secondary" data-close-modal="tradeModal">취소</button>
+            <button type="submit" class="text-button primary">거래 저장</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="assetModal" aria-hidden="true">
+      <div class="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="assetModalTitle">
+        <div class="modal-heading">
+          <div>
+            <span class="section-kicker">New Asset</span>
+            <h2 id="assetModalTitle">자산현황 추가</h2>
+          </div>
+          <button class="close-button" data-close-modal="assetModal" aria-label="닫기">×</button>
+        </div>
+        <form id="assetForm" class="form-grid">
+          <label><span>기준월</span><input name="month" type="month" required /></label>
+          <label>
+            <span class="field-label-row">구분 <button type="button" class="inline-manage-button" data-open-option-manager="assets">항목 관리</button></span>
+            <select name="category" data-asset-category-select required>
+              <option value="부동산">부동산</option>
+              <option value="금융자산">금융자산</option>
+              <option value="부채">부채</option>
+            </select>
+          </label>
+          <label><span>항목명</span><input name="name" placeholder="예: 아파트, 예금, 주담대" required /></label>
+          <label><span>금액</span><input name="amount" class="krw-input" type="text" inputmode="numeric" autocomplete="off" required /></label>
+          <div class="modal-actions">
+            <button type="button" class="text-button secondary" data-close-modal="assetModal">취소</button>
+            <button type="submit" class="text-button primary">추가</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="goalModal" aria-hidden="true">
+      <div class="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="goalModalTitle">
+        <div class="modal-heading">
+          <div>
+            <span class="section-kicker">Financial Goal</span>
+            <h2 id="goalModalTitle">금융자산 목표 수정</h2>
+          </div>
+          <button class="close-button" data-close-modal="goalModal" aria-label="닫기">×</button>
+        </div>
+        <form id="goalForm" class="form-grid single-column">
+          <label><span>목표 금액</span><input name="target" class="krw-input" type="text" inputmode="numeric" autocomplete="off" required /></label>
+          <label><span>목표 시작월</span><input name="startMonth" type="month" required /></label>
+          <label><span>목표 완료월</span><input name="endMonth" type="month" required /></label>
+          <div class="modal-actions">
+            <button type="button" class="text-button secondary" data-close-modal="goalModal">취소</button>
+            <button type="submit" class="text-button primary">저장</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="monthlyCloseModal" aria-hidden="true">
+      <div class="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="monthlyCloseModalTitle">
+        <div class="modal-heading">
+          <div><span class="section-kicker">Monthly Close</span><h2 id="monthlyCloseModalTitle">월 마감값 수정</h2></div>
+          <button class="close-button" data-close-modal="monthlyCloseModal" aria-label="닫기">×</button>
+        </div>
+        <form id="monthlyCloseForm" class="form-grid single-column">
+          <label><span>순자산</span><input name="netWorth" class="krw-input" type="text" inputmode="numeric" required /></label>
+          <label><span>저축률 (%)</span><input name="savingRate" type="number" step="0.1" required /></label>
+          <label><span>예산 소진률 (%)</span><input name="budgetBurnRate" type="number" step="0.1" required /></label>
+          <label><span>투자원금</span><input name="investmentPrincipalKrw" class="krw-input" type="text" inputmode="numeric" required /></label>
+          <label><span>투자 평가액</span><input name="investmentValueKrw" class="krw-input" type="text" inputmode="numeric" required /></label>
+          <div class="form-note">수정값은 해당 월 마감 기록에만 반영됩니다. 원본 데이터를 다시 계산하려면 홈의 현재 데이터 재반영 버튼을 사용하세요.</div>
+          <div class="modal-actions">
+            <button type="button" class="text-button secondary" data-close-modal="monthlyCloseModal">취소</button>
+            <button type="submit" class="text-button primary">수정 저장</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="optionManagerModal" aria-hidden="true">
+      <div class="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="optionManagerTitle">
+        <div class="modal-heading">
+          <div><span class="section-kicker">Input Settings</span><h2 id="optionManagerTitle">입력 항목 관리</h2></div>
+          <button class="close-button" data-close-modal="optionManagerModal" aria-label="닫기">×</button>
+        </div>
+        <div id="optionManagerGroups" class="option-manager-groups"></div>
+        <div class="modal-actions">
+          <button type="button" class="text-button secondary" data-close-modal="optionManagerModal">취소</button>
+          <button type="button" class="text-button primary" id="saveOptionManagerBtn">항목 저장</button>
+        </div>
+      </div>
+    </div>
+
+    <datalist id="ledgerCategoryList">
+      <option value="H급여"></option><option value="M급여"></option><option value="H보너스"></option>
+      <option value="M보너스"></option><option value="이자"></option><option value="관리비"></option>
+      <option value="가스비"></option><option value="보험료"></option><option value="통신비"></option>
+      <option value="자동차 할부"></option>
+      <option value="식비"></option><option value="준원돌봄"></option><option value="생활용품"></option>
+      <option value="예/적금"></option><option value="연금저축"></option><option value="ISA(경주)"></option>
+      <option value="해외직투"></option><option value="예비비"></option><option value="기타"></option>
+    </datalist>
+    <datalist id="ledgerPaymentList">
+      <option value="-"></option><option value="삼성M"></option><option value="국민M"></option>
+      <option value="생활비계좌"></option><option value="현대H"></option><option value="비씨M"></option>
+      <option value="비씨H"></option><option value="신한M"></option><option value="안양페이M"></option>
+      <option value="안양페이H"></option><option value="토스적금"></option><option value="카카오연금M"></option>
+      <option value="카카오연금H"></option><option value="미래에셋M"></option><option value="메리츠M"></option>
+      <option value="메리츠W"></option><option value="네이버CMA"></option>
+    </datalist>
+    <datalist id="heldTickerList"></datalist>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>

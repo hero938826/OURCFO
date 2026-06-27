@@ -1,0 +1,13 @@
+.vercel
+.vercel-home
+.vercel-device.json
+.env
+.env.*
+!.env.example
+node_modules
+.pnpm-store
+public
+.dev-server.*.log
+.vercel-login.*
+*.local
+*.log
