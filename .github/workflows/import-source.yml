@@ -22,15 +22,25 @@ jobs:
       - name: Expand source archive
         run: |
           python - <<'PY'
+          import pathlib
           import zipfile
+
+          root = pathlib.Path('.')
           with zipfile.ZipFile('/tmp/ourcfo-source.zip') as archive:
-              archive.extractall('.')
+              for member in archive.infolist():
+                  normalized = member.filename.replace('\\', '/')
+                  if not normalized or normalized.endswith('/'):
+                      continue
+                  target = root / normalized
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  target.write_bytes(archive.read(member))
           PY
 
       - name: Remove temporary handoff files
         run: |
           rm -rf .github/source
           rm -f .github/workflows/import-source.yml
+          mkdir -p scripts
           cat > scripts/build-static.cjs <<'EOF'
           const fs = require("node:fs/promises");
           const path = require("node:path");
@@ -70,6 +80,7 @@ jobs:
           *.local
           *.log
           EOF
+          find . -maxdepth 1 -name '*\\*' -delete
 
       - name: Commit imported source
         run: |
