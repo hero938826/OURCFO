@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
@@ -822,18 +822,38 @@
       <div class="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="goalModalTitle">
         <div class="modal-heading">
           <div>
-            <span class="section-kicker">Financial Goal</span>
-            <h2 id="goalModalTitle">금융자산 목표 수정</h2>
+            <span class="section-kicker">Goal Settings</span><h2 id="goalModalTitle">Edit CFO Goals</h2>
           </div>
-          <button class="close-button" data-close-modal="goalModal" aria-label="닫기">×</button>
+          <button class="close-button" data-close-modal="goalModal" aria-label="Close">×</button>
         </div>
-        <form id="goalForm" class="form-grid single-column">
-          <label><span>목표 금액</span><input name="target" class="krw-input" type="text" inputmode="numeric" autocomplete="off" required /></label>
-          <label><span>목표 시작월</span><input name="startMonth" type="month" required /></label>
-          <label><span>목표 완료월</span><input name="endMonth" type="month" required /></label>
+        <form id="goalForm" class="form-grid goal-form-grid">
+          <section class="goal-form-section">
+            <h3>Financial Assets</h3>
+            <div class="goal-form-fields">
+              <label><span>Target Amount</span><input name="financialAssetsTarget" class="krw-input" type="text" inputmode="numeric" autocomplete="off" required /></label>
+              <label><span>Start Month</span><input name="financialAssetsStartMonth" type="month" required /></label>
+              <label><span>Target Month</span><input name="financialAssetsEndMonth" type="month" required /></label>
+            </div>
+          </section>
+          <section class="goal-form-section">
+            <h3>Net Worth</h3>
+            <div class="goal-form-fields">
+              <label><span>Target Amount</span><input name="netWorthTarget" class="krw-input" type="text" inputmode="numeric" autocomplete="off" required /></label>
+              <label><span>Start Month</span><input name="netWorthStartMonth" type="month" required /></label>
+              <label><span>Target Month</span><input name="netWorthEndMonth" type="month" required /></label>
+            </div>
+          </section>
+          <section class="goal-form-section">
+            <h3>Junwon Account</h3>
+            <div class="goal-form-fields">
+              <label><span>Target Amount</span><input name="meritzWTarget" class="krw-input" type="text" inputmode="numeric" autocomplete="off" required /></label>
+              <label><span>Start Month</span><input name="meritzWStartMonth" type="month" required /></label>
+              <label><span>Target Month</span><input name="meritzWEndMonth" type="month" required /></label>
+            </div>
+          </section>
           <div class="modal-actions">
-            <button type="button" class="text-button secondary" data-close-modal="goalModal">취소</button>
-            <button type="submit" class="text-button primary">저장</button>
+            <button type="button" class="text-button secondary" data-close-modal="goalModal">Cancel</button>
+            <button type="submit" class="text-button primary">Save</button>
           </div>
         </form>
       </div>
@@ -894,6 +914,8 @@
     <datalist id="heldTickerList"></datalist>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="utils/finance.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
+

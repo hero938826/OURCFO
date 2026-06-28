@@ -1,4 +1,4 @@
-const STORAGE_KEY = "home-wealth-dashboard-v2";
+﻿const STORAGE_KEY = "home-wealth-dashboard-v2";
 const LEGACY_STORAGE_KEY = "home-wealth-dashboard-v1";
 const MARKET_CACHE_KEY = "home-wealth-market-cache-v1";
 const EXCLUDED_ACCOUNT = "메리츠W";
@@ -40,10 +40,10 @@ const DEFAULT_UI_LABELS = {
   tabLedger: "가계부",
   tabStocks: "주식",
   tabAssets: "자산현황",
-  homeGoalTitle: "기간 대비 금융자산 목표",
-  homeCashTitle: "이번 달 현금흐름",
-  homeMarketsTitle: "시장 한눈에 보기",
-  homeWatchTitle: "관심 종목 가격",
+  homeGoalTitle: "Goal Progress",
+  homeCashTitle: "Cashflow Snapshot",
+  homeMarketsTitle: "Market Overview",
+  homeWatchTitle: "Watchlist Prices",
   ledgerPageTitle: "가계부",
   ledgerRecentTitle: "최근 6개월 수입·지출",
   ledgerYtdTitle: "당해 연도 누적",
@@ -67,10 +67,10 @@ const UI_LABEL_NAMES = {
   tabLedger: "가계부 탭",
   tabStocks: "주식 탭",
   tabAssets: "자산현황 탭",
-  homeGoalTitle: "홈 · 금융목표",
-  homeCashTitle: "홈 · 현금흐름",
-  homeMarketsTitle: "홈 · 시장 차트",
-  homeWatchTitle: "홈 · 관심 종목",
+  homeGoalTitle: "Home · Goal Progress",
+  homeCashTitle: "Home · Cashflow",
+  homeMarketsTitle: "Home · Markets",
+  homeWatchTitle: "Home · Watchlist",
   ledgerPageTitle: "가계부 페이지",
   ledgerRecentTitle: "가계부 · 최근 6개월",
   ledgerYtdTitle: "가계부 · 연간 누적",
@@ -94,6 +94,12 @@ const DEFAULT_LAYOUT_ORDERS = {
   ledgerCharts: ["recent6", "ytd", "fixed", "variable", "savings"],
   stockCharts: ["sector", "account"],
   assetCharts: ["allocation", "history"]
+};
+
+const DEFAULT_V2_GOALS = {
+  financialAssets: { title: "Financial Assets", target: 500000000, startMonth: todayMonth(), endMonth: "2035-12" },
+  netWorth: { title: "Net Worth", target: 1000000000, startMonth: todayMonth(), endMonth: "2040-12" },
+  meritzW: { title: "Junwon Account", target: 100000000, startMonth: todayMonth(), endMonth: "2040-12" }
 };
 
 const LAYOUT_GROUP_NAMES = {
@@ -134,7 +140,10 @@ const sampleData = {
   uiConfig: {
     layoutLocked: true,
     labels: {},
-    orders: structuredClone(DEFAULT_LAYOUT_ORDERS)
+    orders: structuredClone(DEFAULT_LAYOUT_ORDERS),
+    meritzScenario: 0.1,
+    dismissedAlerts: [],
+    v2Goals: structuredClone(DEFAULT_V2_GOALS)
   },
   theme: "light"
 };
@@ -306,6 +315,14 @@ function normalizeState(data) {
     uiConfig: {
       layoutLocked: data.uiConfig?.layoutLocked !== false,
       labels: { ...(data.uiConfig?.labels || {}) },
+      meritzScenario: Number(data.uiConfig?.meritzScenario) || 0.1,
+      dismissedAlerts: Array.isArray(data.uiConfig?.dismissedAlerts) ? data.uiConfig.dismissedAlerts.map(String) : [],
+      v2Goals: normalizeV2Goals({
+        ...(data.uiConfig?.v2Goals || {}),
+        financialGoal: data.financialGoal,
+        financialGoalStartMonth: data.financialGoalStartMonth,
+        financialGoalEndMonth: data.financialGoalEndMonth
+      }),
       orders: Object.fromEntries(
         Object.entries(DEFAULT_LAYOUT_ORDERS).map(([group, defaults]) => {
           const saved = Array.isArray(data.uiConfig?.orders?.[group]) ? data.uiConfig.orders[group] : [];
@@ -319,6 +336,33 @@ function normalizeState(data) {
 
 function uniqueOptions(values) {
   return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
+}
+
+function normalizeV2Goals(saved = {}) {
+  const legacy = {
+    financialAssets: {
+      target: Number(saved.financialAssets?.target ?? saved.financialGoal ?? 0) || DEFAULT_V2_GOALS.financialAssets.target,
+      startMonth: saved.financialAssets?.startMonth || saved.financialGoalStartMonth || DEFAULT_V2_GOALS.financialAssets.startMonth,
+      endMonth: saved.financialAssets?.endMonth || saved.financialGoalEndMonth || DEFAULT_V2_GOALS.financialAssets.endMonth
+    },
+    netWorth: saved.netWorth || {},
+    meritzW: saved.meritzW || {}
+  };
+
+  return Object.fromEntries(
+    Object.entries(DEFAULT_V2_GOALS).map(([key, defaults]) => {
+      const input = legacy[key] || {};
+      return [
+        key,
+        {
+          title: defaults.title,
+          target: Number(input.target) || defaults.target,
+          startMonth: /^\d{4}-\d{2}$/.test(String(input.startMonth || "")) ? input.startMonth : defaults.startMonth,
+          endMonth: /^\d{4}-\d{2}$/.test(String(input.endMonth || "")) ? input.endMonth : defaults.endMonth
+        }
+      ];
+    })
+  );
 }
 
 function normalizeAssetCategories(saved, items = []) {
@@ -665,14 +709,17 @@ function applyUiConfig() {
 
   const unlocked = !state.uiConfig.layoutLocked;
   const toggle = document.getElementById("layoutEditToggle");
+  if (!toggle) return;
   toggle.checked = unlocked;
-  document.getElementById("layoutEditorPanel").hidden = !unlocked;
-  setText("layoutEditLabel", unlocked ? "화면 변경 가능" : "화면 편집 잠금");
+  const panel = document.getElementById("layoutEditorPanel");
+  if (panel) panel.hidden = !unlocked;
+  setText("layoutEditLabel", unlocked ? "Layout Editable" : "Layout Lock");
   renderLayoutEditor();
 }
 
 function renderLayoutEditor() {
   const labelEditor = document.getElementById("layoutLabelEditor");
+  if (!labelEditor) return;
   labelEditor.innerHTML = "";
   Object.keys(DEFAULT_UI_LABELS).forEach((key) => {
     const row = document.createElement("label");
@@ -685,6 +732,7 @@ function renderLayoutEditor() {
   });
 
   const orderEditor = document.getElementById("layoutOrderEditor");
+  if (!orderEditor) return;
   orderEditor.innerHTML = "";
   Object.entries(state.uiConfig.orders).forEach(([group, order]) => {
     const wrapper = document.createElement("div");
@@ -735,8 +783,8 @@ function applyTheme() {
 
 function renderAll() {
   syncInputOptions();
-  applyUiConfig();
   renderHome();
+  applyUiConfig();
   renderLedger();
   renderStocks();
   renderAssets();
@@ -866,7 +914,381 @@ function saveOptionManager() {
   showToast("입력 항목을 저장했어요.");
 }
 
+function v2Won(value) {
+  return window.OurCfoFinance?.won ? window.OurCfoFinance.won(value) : money(value);
+}
+
+function v2Pct(value, signed = false) {
+  return window.OurCfoFinance?.pct ? window.OurCfoFinance.pct(value, signed) : percent(value, signed);
+}
+
+function v2SignedWon(value) {
+  return window.OurCfoFinance?.signedWon ? window.OurCfoFinance.signedWon(value) : signedMoney(value);
+}
+
+if (!window.OurCfoFinance) {
+  window.OurCfoFinance = {
+    won: money,
+    signedWon: signedMoney,
+    pct: percent,
+    buildHomeModel({ state, assets, period, entries, currentClose }) {
+      const previousKey = Object.keys(state.monthlyClosings || {}).filter((month) => month < period).sort().at(-1);
+      const previousClose = previousKey ? state.monthlyClosings[previousKey] : null;
+      const ledger = ledgerSummary(entries);
+      const fixed = sum(entries.filter((entry) => entry.type === FIXED_EXPENSE_TYPE), (entry) => entry.amount);
+      const variable = sum(entries.filter((entry) => entry.type === VARIABLE_EXPENSE_TYPE), (entry) => entry.amount);
+      const investment = sum(entries.filter((entry) => /투자|주식|isa|연금|메리츠|meritz/i.test([entry.type, entry.category, entry.payment, entry.memo].join(" "))), (entry) => entry.amount);
+      const cashflow = {
+        income: ledger.income,
+        fixed,
+        variable,
+        saving: ledger.saving,
+        investment,
+        expense: fixed + variable,
+        remainder: ledger.income - fixed - variable - ledger.saving,
+        savingRate: ledger.savingRate,
+        spendRate: ledger.income ? ((fixed + variable) / ledger.income) * 100 : 0
+      };
+      const holdings = assets.portfolio.holdings || [];
+      const total = sum(holdings, (item) => item.valueKrw);
+      const cost = sum(holdings, (item) => item.costKrw);
+      const leveraged = sum(holdings.filter((item) => ["QLD", "TQQQ", "SOXL", "UPRO", "SSO", "TECL", "FNGU"].includes(String(item.ticker).toUpperCase())), (item) => item.valueKrw);
+      const individual = sum(holdings.filter((item) => !["QQQ", "QQQM", "SPY", "SPYM", "VOO", "VTI", "SCHD", "DIA", "IWM", "QLD", "TQQQ", "SOXL"].includes(String(item.ticker).toUpperCase())), (item) => item.valueKrw);
+      const us = sum(holdings.filter((item) => item.country !== "KR"), (item) => item.valueKrw);
+      const kr = sum(holdings.filter((item) => item.country === "KR"), (item) => item.valueKrw);
+      const health = {
+        total,
+        profit: total - cost,
+        returnRate: cost ? ((total - cost) / cost) * 100 : 0,
+        leverageRate: total ? (leveraged / total) * 100 : 0,
+        leverageStatus: total && (leveraged / total) * 100 >= 60 ? "red" : total && (leveraged / total) * 100 >= 40 ? "yellow" : "green",
+        individualRate: total ? (individual / total) * 100 : 0,
+        cashRate: 0,
+        usRate: total ? (us / total) * 100 : 0,
+        krRate: total ? (kr / total) * 100 : 0
+      };
+      const budget = Number(state.variableBudgets?.[period]) || 0;
+      const delta = previousClose ? Number(currentClose.netWorth || 0) - Number(previousClose.netWorth || 0) : null;
+      const deltaRate = previousClose?.netWorth ? (delta / previousClose.netWorth) * 100 : null;
+      const goals = normalizeV2Goals(state.uiConfig?.v2Goals || {});
+      const meritzRate = Number(state.uiConfig?.meritzScenario) || 0.1;
+      const meritz = buildFallbackMeritz(state, assets, entries, meritzRate);
+      return {
+        period,
+        previousClose,
+        delta,
+        deltaRate,
+        cashflow,
+        budget,
+        health,
+        allocation: { items: [], total: 0, debt: assets.debt },
+        alerts: buildFallbackAlerts({ assets, cashflow, budget, previousClose, currentClose, health }),
+        goals: [
+          fallbackGoal("Financial Assets", assets.financial, goals.financialAssets, cashflow.saving || cashflow.investment),
+          fallbackGoal("Net Worth", assets.netWorth, goals.netWorth, cashflow.saving || cashflow.investment),
+          fallbackGoal("Junwon Account", assets.portfolio.excludedValueKrw, goals.meritzW, meritz.monthly)
+        ],
+        meritz,
+        report: fallbackReport(delta, cashflow, budget, health)
+      };
+    }
+  };
+}
+
+function fallbackGoal(title, current, goal, monthlySaving) {
+  const target = Number(goal.target) || 0;
+  const progress = target ? Math.min((current / target) * 100, 999) : 0;
+  const remaining = Math.max(target - current, 0);
+  const months = monthlySaving > 0 && remaining > 0 ? Math.ceil(remaining / monthlySaving) : null;
+  const date = months === null ? null : new Date(new Date().getFullYear(), new Date().getMonth() + months, 1);
+  const formatMonth = (value) => (/^\d{4}-\d{2}$/.test(String(value)) ? String(value).replace("-", ".") : "Not set");
+  return {
+    title,
+    current,
+    target,
+    progress,
+    eta: months === null ? `Target date ${formatMonth(goal.endMonth)}` : `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, "0")}`,
+    dateRange: `${formatMonth(goal.startMonth)} - ${formatMonth(goal.endMonth)}`
+  };
+}
+
+function buildFallbackAlerts({ assets, cashflow, budget, previousClose, currentClose, health }) {
+  const alerts = [];
+  if (health.leverageRate >= 60) alerts.push({ id: "leverage-red", tone: "red", title: "Leveraged ETF Risk", body: `Leveraged ETF exposure is ${percent(health.leverageRate)}. Review your rebalancing rule.` });
+  else if (health.leverageRate >= 40) alerts.push({ id: "leverage-yellow", tone: "yellow", title: "Leverage Check", body: `Leveraged ETF exposure is ${percent(health.leverageRate)}. Prepare for volatility.` });
+  if (cashflow.savingRate >= 40) alerts.push({ id: "saving-rate-strong", tone: "green", title: "Goal Beat", body: `This month's saving rate is ${percent(cashflow.savingRate)}. Cash discipline is strong.` });
+  if (budget && cashflow.variable > budget) alerts.push({ id: "variable-budget-over", tone: "red", title: "Variable Spend Over Budget", body: `Variable spending used ${percent((cashflow.variable / budget) * 100)} of budget.` });
+  if (previousClose && currentClose && Number(currentClose.netWorth || 0) >= Number(previousClose.netWorth || 0)) alerts.push({ id: "net-worth-up", tone: "green", title: "Net Worth Improved", body: `Net worth changed by ${signedMoney(Number(currentClose.netWorth || 0) - Number(previousClose.netWorth || 0))} vs last close.` });
+  if (previousClose && currentClose && Number(currentClose.debt || 0) < Number(previousClose.debt || 0)) alerts.push({ id: "debt-down", tone: "green", title: "Debt Improved", body: "Debt is lower than the previous close. Keep the repayment rhythm." });
+  if (!alerts.length && (assets.current || []).length) alerts.push({ id: "data-ready", tone: "green", title: "Data Ready", body: "Assets, cashflow, and investment data are being summarized." });
+  return alerts;
+}
+
+function buildFallbackMeritz(state, assets, entries, annualRate) {
+  const principal = assets.portfolio.excludedValueKrw;
+  const account = String(state.excludedStockAccount || "Meritz W").toLowerCase();
+  const monthly = sum(entries.filter((entry) => [entry.type, entry.category, entry.payment, entry.memo].join(" ").toLowerCase().includes(account)), (entry) => entry.amount);
+  const annualExtra = sum((state.stockTransactions || []).filter((trade) => String(trade.account || "").toLowerCase().includes(account) && String(trade.date || "").startsWith(String(new Date().getFullYear()))), (trade) => trade.amountKrw);
+  const futureValue = (years) => {
+    const monthlyRate = annualRate / 12;
+    let value = principal;
+    for (let month = 1; month <= years * 12; month += 1) {
+      value = value * (1 + monthlyRate) + monthly;
+      if (month % 12 === 0) value += annualExtra;
+    }
+    return value;
+  };
+  return { principal, monthly, annualExtra, annualRate, scenarios: [10, 15, 20].map((years) => ({ years, value: futureValue(years) })) };
+}
+
+function fallbackReport(delta, cashflow, budget, health) {
+  if (!cashflow.income && !health.total) return "Input this month's ledger and investment data to generate an automatic CFO report.";
+  const deltaText = delta === null ? "Month-over-month comparison appears after a monthly close." : `Net worth changed by ${signedMoney(delta)} vs the previous close.`;
+  const budgetText = budget ? `Variable spending used ${percent((cashflow.variable / budget) * 100)} of budget.` : "Variable spending budget is not set yet.";
+  return `${deltaText} Saving rate is ${percent(cashflow.savingRate)}. ${budgetText} Investment return is ${percent(health.returnRate, true)}.`;
+}
+
+function homeMetricCard({ label, value, helper = "", tone = "neutral" }) {
+  return `
+    <article class="v2-metric-card ${tone}">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      <small>${escapeHtml(helper)}</small>
+    </article>
+  `;
+}
+
+function progressGoalCard(goal) {
+  const width = Math.min(Math.max(goal.progress || 0, 0), 100);
+  return `
+    <article class="v2-progress-card">
+      <div class="v2-progress-head">
+        <div><span>${escapeHtml(goal.title)}</span><strong>${v2Pct(goal.progress || 0)}</strong></div>
+        <small>${escapeHtml(goal.eta)}</small>
+      </div>
+      <div class="v2-progress-track"><div style="width:${width}%"></div></div>
+      <p>${v2Won(goal.current)} / ${v2Won(goal.target)}</p>
+      <small>Plan ${escapeHtml(goal.dateRange || "Not set")}</small>
+    </article>
+  `;
+}
+
+function richEmptyState(title, body, actionLabel, actionTarget) {
+  return `
+    <div class="empty-state rich-empty-state">
+      <strong>${escapeHtml(title)}</strong>
+      <span>${escapeHtml(body)}</span>
+      ${actionLabel ? `<button class="text-button primary" data-view-link="${actionTarget}">${escapeHtml(actionLabel)}</button>` : ""}
+    </div>
+  `;
+}
+
+function tableEmptyState(colspan, title, body, modalId) {
+  return `
+    <tr>
+      <td colspan="${colspan}" class="empty-state">
+        <div class="rich-empty-state compact">
+          <strong>${escapeHtml(title)}</strong>
+          <span>${escapeHtml(body)}</span>
+          ${modalId ? `<button class="text-button primary" data-open-modal="${modalId}">바로 입력</button>` : ""}
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+function renderAllocationBars(model) {
+  if (!model.allocation.items.length) {
+    return richEmptyState("아직 입력된 데이터가 없어요", "자산현황을 추가하면 목표 달성률이 표시돼요.", "자산 입력하기", "assets");
+  }
+  return `
+    <div class="v2-allocation-list">
+      ${model.allocation.items.map((item) => `
+        <div class="v2-allocation-row">
+          <div><span>${escapeHtml(item.label)}</span><strong>${v2Won(item.value)}</strong></div>
+          <div class="v2-allocation-bar"><i class="${item.tone}" style="width:${Math.max(item.rate, 2)}%"></i></div>
+          <small>${v2Pct(item.rate)}</small>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderScenarioCells(model) {
+  return model.meritz.scenarios.map((item) => `
+    <div>
+      <span>${item.years}Y Forecast</span>
+      <strong>${v2Won(item.value)}</strong>
+    </div>
+  `).join("");
+}
 function renderHome() {
+  const assets = assetSnapshot();
+  const period = latestLedgerMonth();
+  const monthEntries = state.ledgerEntries.filter((entry) => String(entry.date).startsWith(period));
+  const ledger = ledgerSummary(monthEntries);
+  const currentClose = buildMonthlyCloseSnapshot(period);
+  const model = window.OurCfoFinance.buildHomeModel({ state, assets, period, entries: monthEntries, currentClose });
+  const home = document.querySelector('[data-view="home"]');
+  const deltaTone = model.delta === null ? "neutral" : model.delta >= 0 ? "positive" : "negative";
+  const budgetRate = model.budget ? (model.cashflow.variable / model.budget) * 100 : 0;
+  const selectedScenario = Number(state.uiConfig.meritzScenario || 0.1);
+  const dismissedAlerts = new Set(state.uiConfig.dismissedAlerts || []);
+  const visibleAlerts = model.alerts.filter((alert) => !dismissedAlerts.has(alert.id));
+
+  home.innerHTML = `
+    <section class="v2-hero-summary">
+      <div class="v2-hero-copy">
+        <span class="section-kicker">OurCFO v2.0</span>
+        <h2>Family CFO Decision Dashboard</h2>
+        <strong>${v2Won(assets.netWorth)}</strong>
+        <p class="${deltaTone}">${model.delta === null ? "Month-over-month data needed" : `vs previous close ${v2SignedWon(model.delta)} (${v2Pct(model.deltaRate, true)})`}</p>
+      </div>
+      <div class="v2-hero-controls">
+        <label class="theme-switch" title="Dark mode">
+          <input type="checkbox" id="themeToggle" ${state.theme === "dark" ? "checked" : ""} />
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+          <span>Dark Mode</span>
+        </label>
+        <label class="theme-switch" title="Edit screen labels and chart order">
+          <input type="checkbox" id="layoutEditToggle" ${state.uiConfig.layoutLocked ? "" : "checked"} />
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+          <span id="layoutEditLabel">Layout Lock</span>
+        </label>
+      </div>
+      <div class="v2-hero-metrics">
+        ${homeMetricCard({ label: "Family Net Worth", value: v2Won(assets.netWorth), helper: model.delta === null ? "After monthly close" : v2SignedWon(model.delta), tone: deltaTone })}
+        ${homeMetricCard({ label: "MoM Growth Rate", value: model.deltaRate === null ? "Data needed" : v2Pct(model.deltaRate, true), helper: model.previousClose ? "Previous close basis" : "First close needed", tone: deltaTone })}
+        ${homeMetricCard({ label: "Financial Assets", value: v2Won(assets.financial), helper: `Stocks ${v2Won(assets.stockFinancial)}`, tone: "positive" })}
+        ${homeMetricCard({ label: "Debt", value: v2Won(assets.debt), helper: assets.debt ? "Repayment plan" : "No debt", tone: assets.debt ? "warning" : "positive" })}
+        ${homeMetricCard({ label: "This Month Saving Rate", value: v2Pct(ledger.savingRate), helper: `${period.replace("-", ".")} basis`, tone: ledger.savingRate >= 40 ? "positive" : ledger.savingRate >= 25 ? "neutral" : "warning" })}
+        ${homeMetricCard({ label: "Remaining Cash", value: v2Won(model.cashflow.remainder), helper: `Spend rate ${v2Pct(model.cashflow.spendRate)}`, tone: model.cashflow.remainder >= 0 ? "positive" : "negative" })}
+      </div>
+    </section>
+
+    <section class="surface v2-report-surface">
+      <div class="section-heading compact">
+        <div><span class="section-kicker">Monthly Report</span><h2>Monthly CFO Report</h2></div>
+        <span class="status-badge">${period.replace("-", ".")}</span>
+      </div>
+      <p>${escapeHtml(model.report)}</p>
+    </section>
+
+    <article class="surface layout-editor" id="layoutEditorPanel" hidden>
+      <div class="section-heading compact">
+        <div><span class="section-kicker">Layout Editor</span><h2>Screen Labels and Chart Order</h2></div>
+        <span class="status-badge">Editable</span>
+      </div>
+      <div class="layout-editor-grid">
+        <div><h3>Rename</h3><div class="layout-label-list" id="layoutLabelEditor"></div></div>
+        <div><h3>Chart Order</h3><div class="layout-order-list" id="layoutOrderEditor"></div></div>
+      </div>
+    </article>
+
+    <section class="v2-cfo-grid">
+      <article class="surface v2-alert-surface">
+        <div class="section-heading compact">
+          <div><span class="section-kicker">CFO Alerts</span><h2>Today Check Signals</h2></div>
+          <button class="text-button secondary" data-view-link="ledger" title="Open ledger">Ledger</button>
+        </div>
+        <div class="v2-alert-list">
+          ${visibleAlerts.length ? visibleAlerts.map((alert) => `
+            <div class="v2-alert ${alert.tone}">
+              <i aria-hidden="true"></i>
+              <div><strong>${escapeHtml(alert.title)}</strong><span>${escapeHtml(alert.body)}</span></div>
+              <button class="v2-alert-dismiss" data-dismiss-alert="${escapeHtml(alert.id)}" aria-label="Dismiss alert">&times;</button>
+            </div>
+          `).join("") : richEmptyState("All clear", "Dismissed alerts are hidden for this browser.", "Open Ledger", "ledger")}
+        </div>
+      </article>
+
+      <article class="surface v2-goal-surface">
+        <div class="section-heading compact">
+          <div><span class="section-kicker">Goal Progress</span><h2>Goal Progress</h2></div>
+          <button class="text-button secondary" data-open-modal="goalModal">Edit Goals</button>
+        </div>
+        <div class="v2-progress-list">${model.goals.map(progressGoalCard).join("")}</div>
+      </article>
+    </section>
+
+    <section class="v2-dashboard-grid">
+      <article class="surface v2-cashflow-surface">
+        <div class="section-heading compact">
+          <div><span class="section-kicker">Cashflow Snapshot</span><h2>Cashflow Snapshot</h2></div>
+          <span class="updated-label">${period.replace("-", ".")}</span>
+        </div>
+        ${model.cashflow.income ? `
+          <div class="v2-waterfall">
+            ${[
+              ["Income", model.cashflow.income, "positive"],
+              ["Fixed Spend", -model.cashflow.fixed, "negative"],
+              ["Variable Spend", -model.cashflow.variable, budgetRate >= 100 ? "danger" : "warning"],
+              ["Savings", -model.cashflow.saving, "positive"],
+              ["Investment", -model.cashflow.investment, "neutral"],
+              ["Remaining Cash", model.cashflow.remainder, model.cashflow.remainder >= 0 ? "positive" : "danger"]
+            ].map(([label, value, tone]) => `
+              <div class="${tone}"><span>${label}</span><strong>${v2SignedWon(value)}</strong></div>
+            `).join("")}
+          </div>
+          <div class="v2-rate-row">
+            <span>Saving Rate <strong>${v2Pct(model.cashflow.savingRate)}</strong></span>
+            <span>Spend Rate <strong>${v2Pct(model.cashflow.spendRate)}</strong></span>
+            <span>Variable Budget <strong>${model.budget ? v2Pct(budgetRate) : "Set budget"}</strong></span>
+          </div>
+        ` : richEmptyState("Ledger data needed", "Enter this month's income, expenses, savings, and investments to calculate cashflow.", "Add Ledger", "ledger")}
+      </article>
+
+      <article class="surface v2-investment-surface">
+        <div class="section-heading compact">
+          <div><span class="section-kicker">Investment Health</span><h2>Investment Health</h2></div>
+          <button class="text-button secondary" data-view-link="stocks" title="Open stocks">Stocks</button>
+        </div>
+        <div class="v2-health-grid">
+          ${homeMetricCard({ label: "Total Investment Value", value: v2Won(model.health.total), helper: `Profit ${v2SignedWon(model.health.profit)}`, tone: "positive" })}
+          ${homeMetricCard({ label: "Total Return", value: v2Pct(model.health.returnRate, true), helper: "All holdings", tone: model.health.returnRate >= 0 ? "positive" : "negative" })}
+          ${homeMetricCard({ label: "Leveraged ETF", value: v2Pct(model.health.leverageRate), helper: "40% yellow / 60% red", tone: model.health.leverageStatus === "red" ? "negative" : model.health.leverageStatus === "yellow" ? "warning" : "positive" })}
+          ${homeMetricCard({ label: "Single Stock Mix", value: v2Pct(model.health.individualRate), helper: `US ${v2Pct(model.health.usRate)} / KR ${v2Pct(model.health.krRate)}`, tone: "neutral" })}
+        </div>
+      </article>
+
+      <article class="surface v2-meritz-surface">
+        <div class="section-heading compact">
+          <div><span class="section-kicker">Junwon Account</span><h2>Junwon Account · Meritz W</h2></div>
+          <div class="segmented-control compact-control" data-meritz-scenario>
+            ${[0.05, 0.1, 0.15].map((rate) => `<button class="${selectedScenario === rate ? "active" : ""}" data-meritz-rate="${rate}">${Math.round(rate * 100)}%</button>`).join("")}
+          </div>
+        </div>
+        <div class="v2-meritz-top">
+          ${homeMetricCard({ label: "Current Value", value: v2Won(model.meritz.principal), helper: "Meritz W account", tone: "positive" })}
+          ${homeMetricCard({ label: "Monthly Contribution", value: v2Won(model.meritz.monthly), helper: "This month basis", tone: model.meritz.monthly ? "positive" : "warning" })}
+          ${homeMetricCard({ label: "Annual Extra Investment", value: v2Won(model.meritz.annualExtra), helper: "Current-year trades", tone: "neutral" })}
+        </div>
+        <div class="v2-scenario-grid">${renderScenarioCells(model)}</div>
+      </article>
+    </section>
+
+    <section class="dashboard-section" data-layout-group="homeCharts" data-layout-id="markets">
+      <div class="section-heading">
+        <div><span class="section-kicker">Markets</span><h2 data-ui-label="homeMarketsTitle">Market Overview</h2></div>
+        <span class="updated-label" id="marketUpdatedAt">-</span>
+      </div>
+      <div class="market-grid" id="marketGrid"></div>
+    </section>
+
+    <section class="dashboard-section" data-layout-group="homeCharts" data-layout-id="watch">
+      <div class="section-heading">
+        <div><span class="section-kicker">US ETFs</span><h2 data-ui-label="homeWatchTitle">Watchlist Prices</h2></div>
+        <span class="updated-label">USD basis</span>
+      </div>
+      <div class="quote-grid" id="watchQuoteGrid"></div>
+    </section>
+  `;
+
+  renderMarketCards();
+  renderWatchQuotes();
+}
+
+function renderHomeLegacy() {
   const assets = assetSnapshot();
   const period = latestLedgerMonth();
   const monthEntries = state.ledgerEntries.filter((entry) => String(entry.date).startsWith(period));
@@ -1036,7 +1458,7 @@ function renderLedger() {
     });
 
   if (!visible.length) {
-    body.innerHTML = '<tr><td colspan="8" class="empty-state">표시할 내역이 없습니다.</td></tr>';
+    body.innerHTML = tableEmptyState(8, "아직 입력된 데이터가 없어요", "이번 달 가계부를 입력하면 자동 계산돼요.", "ledgerModal");
   }
 
   const visibleIds = pageRows.map((entry) => entry.id);
@@ -1288,7 +1710,7 @@ function renderStocks() {
     `;
     body.appendChild(row);
   });
-  if (!sorted.length) body.innerHTML = '<tr><td colspan="11" class="empty-state">보유 종목을 추가해 주세요.</td></tr>';
+  if (!sorted.length) body.innerHTML = tableEmptyState(11, "아직 입력된 주식이 없어요", "주식 보유 데이터를 입력하면 투자 건전성이 자동 계산돼요.", "stockModal");
   renderPagination("stockPagination", stockPage, totalPages, "stocks");
 
   renderStockTreemap(portfolio.holdings);
@@ -1365,7 +1787,7 @@ function renderStockTransactions() {
       <td>${escapeHtml(item.memo || "-")}</td>
     </tr>
   `).join("");
-  if (!transactions.length) body.innerHTML = '<tr><td colspan="9" class="empty-state">매수·매도 기록이 아직 없습니다.</td></tr>';
+  if (!transactions.length) body.innerHTML = tableEmptyState(9, "매수·매도 기록이 아직 없어요", "거래를 기록하면 실현손익과 투자 흐름이 정리돼요.", "tradeModal");
 }
 
 function renderStockTreemap(holdings) {
@@ -1374,7 +1796,7 @@ function renderStockTreemap(holdings) {
     .filter((item) => item.valueKrw > 0)
     .sort((a, b) => b.valueKrw - a.valueKrw);
   if (!items.length) {
-    container.innerHTML = '<div class="empty-state">보유 종목을 추가해 주세요.</div>';
+    container.innerHTML = richEmptyState("아직 입력된 데이터가 없어요", "주식 보유 데이터를 입력하면 종목별 비중이 표시돼요.", "주식 입력하기", "stocks");
     return;
   }
   const rectangles = [];
@@ -1490,8 +1912,8 @@ function renderMeritzW(items) {
     body.appendChild(row);
   });
   if (!items.length) {
-    list.innerHTML = '<div class="empty-state">메리츠W 보유 종목이 없습니다.</div>';
-    body.innerHTML = '<tr><td colspan="11" class="empty-state">메리츠W 보유 종목이 없습니다.</td></tr>';
+    list.innerHTML = richEmptyState("메리츠W 보유 종목이 없어요", "준원계좌 종목을 입력하면 장기 시나리오가 표시돼요.", "주식 입력하기", "stocks");
+    body.innerHTML = tableEmptyState(11, "메리츠W 보유 종목이 없어요", "준원계좌 종목을 입력하면 장기 시나리오가 표시돼요.", "stockModal");
   }
 }
 
@@ -1772,7 +2194,7 @@ function drawDonut(canvasId, legendId, entries, centerLabel) {
     `;
     legend.appendChild(item);
   });
-  if (!positiveEntries.length) legend.innerHTML = '<div class="empty-state">표시할 데이터가 없습니다.</div>';
+  if (!positiveEntries.length) legend.innerHTML = richEmptyState("아직 입력된 데이터가 없어요", "자산현황을 추가하면 배분 차트가 표시돼요.", "자산 입력하기", "assets");
   setChartHoverData(canvas, hits);
 }
 
@@ -1945,6 +2367,45 @@ function closeModal(id) {
   modal.setAttribute("aria-hidden", "true");
 }
 
+function enhanceInputUx() {
+  document.querySelectorAll(".form-grid label").forEach((label) => {
+    const control = label.querySelector("input, select");
+    const textNode = label.querySelector("span");
+    if (!control || !textNode || textNode.dataset.enhanced === "true") return;
+    textNode.dataset.enhanced = "true";
+    const badge = document.createElement("em");
+    badge.className = control.required ? "field-required" : "field-optional";
+    badge.textContent = control.required ? "Required" : "Optional";
+    textNode.appendChild(badge);
+  });
+}
+
+function fillGoalForm() {
+  const form = document.getElementById("goalForm");
+  if (!form) return;
+  const goals = normalizeV2Goals(state.uiConfig?.v2Goals || {});
+  const fields = [
+    ["financialAssets", "financialAssets"],
+    ["netWorth", "netWorth"],
+    ["meritzW", "meritzW"]
+  ];
+  fields.forEach(([key, prefix]) => {
+    const goal = goals[key];
+    formatKrwInput(form.elements[`${prefix}Target`], goal.target);
+    form.elements[`${prefix}StartMonth`].value = goal.startMonth;
+    form.elements[`${prefix}EndMonth`].value = goal.endMonth;
+  });
+}
+
+function readGoalForm(data, key, prefix) {
+  return {
+    ...(state.uiConfig.v2Goals?.[key] || DEFAULT_V2_GOALS[key]),
+    target: inputNumber(data.get(`${prefix}Target`)),
+    startMonth: String(data.get(`${prefix}StartMonth`) || todayMonth()),
+    endMonth: String(data.get(`${prefix}EndMonth`) || todayMonth())
+  };
+}
+
 async function loadMarketData() {
   const symbols = [
     ...MARKET_CONFIG.map((item) => item.symbol),
@@ -2101,10 +2562,7 @@ document.getElementById("openAssetModalBtn").addEventListener("click", () => {
 });
 
 document.getElementById("openGoalModalBtn").addEventListener("click", () => {
-  const form = document.getElementById("goalForm");
-  formatKrwInput(form.elements.target, state.financialGoal);
-  form.elements.startMonth.value = state.financialGoalStartMonth;
-  form.elements.endMonth.value = state.financialGoalEndMonth;
+  fillGoalForm();
   openModal("goalModal");
 });
 
@@ -2361,19 +2819,24 @@ document.getElementById("assetForm").addEventListener("submit", (event) => {
 document.getElementById("goalForm").addEventListener("submit", (event) => {
   event.preventDefault();
   const data = new FormData(event.currentTarget);
-  const startMonth = String(data.get("startMonth"));
-  const endMonth = String(data.get("endMonth"));
-  if (startMonth > endMonth) {
-    showToast("목표 종료월은 시작월보다 늦어야 해요.");
+  const goals = {
+    financialAssets: readGoalForm(data, "financialAssets", "financialAssets"),
+    netWorth: readGoalForm(data, "netWorth", "netWorth"),
+    meritzW: readGoalForm(data, "meritzW", "meritzW")
+  };
+  const invalid = Object.values(goals).some((goal) => goal.startMonth > goal.endMonth);
+  if (invalid) {
+    showToast("Target month must be after start month.");
     return;
   }
-  state.financialGoal = inputNumber(data.get("target"));
-  state.financialGoalStartMonth = startMonth;
-  state.financialGoalEndMonth = endMonth;
+  state.uiConfig.v2Goals = normalizeV2Goals(goals);
+  state.financialGoal = state.uiConfig.v2Goals.financialAssets.target;
+  state.financialGoalStartMonth = state.uiConfig.v2Goals.financialAssets.startMonth;
+  state.financialGoalEndMonth = state.uiConfig.v2Goals.financialAssets.endMonth;
   saveState();
   closeModal("goalModal");
   renderAll();
-  showToast("금융자산 목표를 수정했어요.");
+  showToast("Goal settings saved.");
 });
 
 document.getElementById("monthlyCloseForm").addEventListener("submit", (event) => {
@@ -2403,6 +2866,33 @@ document.getElementById("monthlyCloseForm").addEventListener("submit", (event) =
 });
 
 document.addEventListener("change", (event) => {
+  const dynamicThemeToggle = event.target.closest("#themeToggle");
+  if (dynamicThemeToggle) {
+    state.theme = dynamicThemeToggle.checked ? "dark" : "light";
+    saveState();
+    applyTheme();
+    return;
+  }
+
+  const dynamicLayoutToggle = event.target.closest("#layoutEditToggle");
+  if (dynamicLayoutToggle) {
+    state.uiConfig.layoutLocked = !dynamicLayoutToggle.checked;
+    saveState();
+    applyUiConfig();
+    return;
+  }
+
+  const dynamicLayoutLabel = event.target.closest("[data-layout-label-input]");
+  if (dynamicLayoutLabel) {
+    const key = dynamicLayoutLabel.dataset.layoutLabelInput;
+    const value = dynamicLayoutLabel.value.trim();
+    if (value) state.uiConfig.labels[key] = value;
+    else delete state.uiConfig.labels[key];
+    saveState();
+    renderAll();
+    return;
+  }
+
   const selection = event.target.closest("[data-select-ledger]");
   if (selection) {
     if (selection.checked) selectedLedgerIds.add(selection.dataset.selectLedger);
@@ -2430,6 +2920,41 @@ document.addEventListener("change", (event) => {
 });
 
 document.addEventListener("click", (event) => {
+  const dismissAlertButton = event.target.closest("[data-dismiss-alert]");
+  if (dismissAlertButton) {
+    const alertId = dismissAlertButton.dataset.dismissAlert;
+    const dismissed = new Set(state.uiConfig.dismissedAlerts || []);
+    dismissed.add(alertId);
+    state.uiConfig.dismissedAlerts = [...dismissed];
+    saveState();
+    renderHome();
+    return;
+  }
+
+  const viewLink = event.target.closest("[data-view-link]");
+  if (viewLink) {
+    setView(viewLink.dataset.viewLink);
+    return;
+  }
+
+  const modalButton = event.target.closest("[data-open-modal]");
+  if (modalButton) {
+    const modalId = modalButton.dataset.openModal;
+    if (modalId === "goalModal") {
+      fillGoalForm();
+    }
+    openModal(modalId);
+    return;
+  }
+
+  const meritzButton = event.target.closest("[data-meritz-rate]");
+  if (meritzButton) {
+    state.uiConfig.meritzScenario = Number(meritzButton.dataset.meritzRate) || 0.1;
+    saveState();
+    renderHome();
+    return;
+  }
+
   const pageButton = event.target.closest("[data-page-scope]");
   if (pageButton && !pageButton.disabled) {
     const nextPage = Number(pageButton.dataset.page);
@@ -2553,6 +3078,8 @@ document.getElementById("accessForm").addEventListener("submit", (event) => {
   document.getElementById("accessPin").focus();
 });
 
+enhanceInputUx();
 applyTheme();
 renderAll();
 loadMarketData();
+
