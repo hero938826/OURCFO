@@ -134,12 +134,14 @@ server.listen(port, "0.0.0.0", () => {
           grep -q "data-dismiss-alert" app.js
           grep -q "financialAssetsTarget" index.html
           ! grep -q "v2-allocation-surface" app.js
-      - name: Remove one-time workflow
-        run: rm -f .github/workflows/import-v2-dashboard.yml
+      - name: Remove one-time workflow and trigger
+        run: |
+          rm -f .github/workflows/import-v2-dashboard.yml
+          rm -f .github/import-v2-trigger.txt
       - name: Commit imported dashboard
         run: |
           git config user.name "codex-ourcfo-bot"
           git config user.email "codex-ourcfo-bot@users.noreply.github.com"
-          git add index.html styles.css app.js utils scripts .gitignore .vercelignore .github/workflows/import-v2-dashboard.yml
+          git add index.html styles.css app.js utils scripts .gitignore .vercelignore .github/workflows/import-v2-dashboard.yml .github/import-v2-trigger.txt
           git commit -m "Apply OurCFO v2 dashboard updates" || exit 0
           git push
