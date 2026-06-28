@@ -691,6 +691,59 @@ function renderMonthlyManagement() {
   });
 }
 
+function monthLabel(month) {
+  const [year, monthNumber] = String(month || todayMonth()).split("-");
+  return `${year}년 ${Number(monthNumber)}월`;
+}
+
+function renderLedgerMonthlyClose(month = selectedLedgerMonth || todayMonth()) {
+  const stored = state.monthlyClosings[month];
+  const snapshot = stored || buildMonthlyCloseSnapshot(month);
+  const entries = state.ledgerEntries.filter((entry) => String(entry.date).startsWith(month));
+  const status = document.getElementById("ledgerMonthlyCloseStatus");
+  if (status) {
+    status.textContent = stored ? "마감 완료" : "마감 전";
+    status.classList.toggle("closed", Boolean(stored));
+  }
+
+  setText("ledgerMonthlyCloseMonth", monthLabel(month));
+  setText(
+    "ledgerMonthlyCloseCaption",
+    stored
+      ? `마감값 고정 · ${new Date(stored.updatedAt).toLocaleDateString("ko-KR")} 반영`
+      : `${entries.length.toLocaleString("ko-KR")}건 기준 · 순자산 ${money(snapshot.netWorth)}`
+  );
+
+  const closeButton = document.getElementById("closeSelectedMonthBtn");
+  const editButton = document.getElementById("editSelectedMonthlyCloseBtn");
+  const reapplyButton = document.getElementById("reapplySelectedMonthlyCloseBtn");
+  if (closeButton) closeButton.disabled = Boolean(stored);
+  if (editButton) editButton.disabled = !stored;
+  if (reapplyButton) reapplyButton.disabled = !stored;
+}
+
+function saveMonthlyClose(month, { reapply = false } = {}) {
+  state.monthlyClosings[month] = buildMonthlyCloseSnapshot(month);
+  saveState();
+  renderHome();
+  renderLedger();
+  showToast(`${monthLabel(month)} ${reapply ? "마감값을 다시 반영했어요." : "마감을 완료했어요."}`);
+}
+
+function openMonthlyCloseEditor(month = selectedLedgerMonth || todayMonth()) {
+  const closing = state.monthlyClosings[month];
+  if (!closing) return;
+  const form = document.getElementById("monthlyCloseForm");
+  form.dataset.month = month;
+  setText("monthlyCloseModalTitle", `${monthLabel(month)} 마감값 수정`);
+  formatKrwInput(form.elements.netWorth, Math.round(closing.netWorth));
+  form.elements.savingRate.value = closing.savingRate.toFixed(1);
+  form.elements.budgetBurnRate.value = closing.budgetBurnRate.toFixed(1);
+  formatKrwInput(form.elements.investmentPrincipalKrw, Math.round(closing.investmentPrincipalKrw));
+  formatKrwInput(form.elements.investmentValueKrw, Math.round(closing.investmentValueKrw));
+  openModal("monthlyCloseModal");
+}
+
 function getUiLabel(key) {
   return state.uiConfig.labels[key] || DEFAULT_UI_LABELS[key] || key;
 }
@@ -1402,7 +1455,13 @@ function renderWatchQuotes() {
 }
 
 function renderLedger() {
-  const months = [...new Set(state.ledgerEntries.map((entry) => String(entry.date || "").slice(0, 7)).filter(Boolean))].sort().reverse();
+  const months = [
+    ...new Set([
+      ...state.ledgerEntries.map((entry) => String(entry.date || "").slice(0, 7)).filter(Boolean),
+      ...Object.keys(state.monthlyClosings || {}),
+      todayMonth()
+    ])
+  ].sort().reverse();
   if (!months.includes(selectedLedgerMonth)) selectedLedgerMonth = months[0] || todayMonth();
   const monthFilter = document.getElementById("ledgerMonthFilter");
   monthFilter.innerHTML = months.map((month) => `<option value="${month}">${month.replace("-", "년 ")}월</option>`).join("");
@@ -1433,6 +1492,7 @@ function renderLedger() {
   lockButton.setAttribute("aria-pressed", String(ledgerUnlocked));
   lockButton.textContent = ledgerUnlocked ? "수정 가능" : "수정 잠금";
   document.getElementById("deleteSelectedLedgerBtn").disabled = selectedLedgerIds.size === 0;
+  renderLedgerMonthlyClose(period);
 
   document.querySelectorAll("[data-ledger-filter]").forEach((button) => {
     button.classList.toggle("active", button.dataset.ledgerFilter === currentLedgerFilter);
@@ -2567,32 +2627,31 @@ document.getElementById("openGoalModalBtn").addEventListener("click", () => {
 });
 
 document.getElementById("closeCurrentMonthBtn").addEventListener("click", () => {
-  const month = todayMonth();
-  state.monthlyClosings[month] = buildMonthlyCloseSnapshot(month);
-  saveState();
-  renderHome();
-  showToast(`${Number(month.slice(5))}월 마감을 완료했어요.`);
+  saveMonthlyClose(todayMonth());
 });
 
 document.getElementById("editMonthlyCloseBtn").addEventListener("click", () => {
-  const closing = state.monthlyClosings[todayMonth()];
-  if (!closing) return;
-  const form = document.getElementById("monthlyCloseForm");
-  formatKrwInput(form.elements.netWorth, Math.round(closing.netWorth));
-  form.elements.savingRate.value = closing.savingRate.toFixed(1);
-  form.elements.budgetBurnRate.value = closing.budgetBurnRate.toFixed(1);
-  formatKrwInput(form.elements.investmentPrincipalKrw, Math.round(closing.investmentPrincipalKrw));
-  formatKrwInput(form.elements.investmentValueKrw, Math.round(closing.investmentValueKrw));
-  openModal("monthlyCloseModal");
+  openMonthlyCloseEditor(todayMonth());
 });
 
 document.getElementById("reapplyMonthlyCloseBtn").addEventListener("click", () => {
   const month = todayMonth();
   if (!state.monthlyClosings[month]) return;
-  state.monthlyClosings[month] = buildMonthlyCloseSnapshot(month);
-  saveState();
-  renderHome();
-  showToast("최신 입력값으로 월 마감을 다시 반영했어요.");
+  saveMonthlyClose(month, { reapply: true });
+});
+
+document.getElementById("closeSelectedMonthBtn").addEventListener("click", () => {
+  saveMonthlyClose(selectedLedgerMonth || todayMonth());
+});
+
+document.getElementById("editSelectedMonthlyCloseBtn").addEventListener("click", () => {
+  openMonthlyCloseEditor(selectedLedgerMonth || todayMonth());
+});
+
+document.getElementById("reapplySelectedMonthlyCloseBtn").addEventListener("click", () => {
+  const month = selectedLedgerMonth || todayMonth();
+  if (!state.monthlyClosings[month]) return;
+  saveMonthlyClose(month, { reapply: true });
 });
 
 document.querySelectorAll("[data-open-option-manager]").forEach((button) => {
@@ -2841,7 +2900,7 @@ document.getElementById("goalForm").addEventListener("submit", (event) => {
 
 document.getElementById("monthlyCloseForm").addEventListener("submit", (event) => {
   event.preventDefault();
-  const month = todayMonth();
+  const month = event.currentTarget.dataset.month || selectedLedgerMonth || todayMonth();
   const current = state.monthlyClosings[month];
   if (!current) return;
   const data = new FormData(event.currentTarget);
@@ -2862,7 +2921,8 @@ document.getElementById("monthlyCloseForm").addEventListener("submit", (event) =
   saveState();
   closeModal("monthlyCloseModal");
   renderHome();
-  showToast("수정한 월 마감값을 저장했어요.");
+  renderLedger();
+  showToast(`${monthLabel(month)} 수정 마감값을 저장했어요.`);
 });
 
 document.addEventListener("change", (event) => {

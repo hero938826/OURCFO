@@ -969,6 +969,50 @@ h2 {
   font-weight: 750;
 }
 
+.ledger-close-panel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--surface-soft) 72%, transparent);
+}
+
+.ledger-close-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 170px;
+}
+
+.ledger-close-copy strong {
+  color: var(--text);
+  font-size: 15px;
+}
+
+.ledger-close-copy small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ledger-close-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ledger-close-actions .text-button {
+  min-height: 34px;
+}
+
+.status-badge.closed {
+  border-color: color-mix(in srgb, var(--green) 38%, var(--line));
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+  color: var(--green);
+}
+
 .pagination {
   display: flex;
   align-items: center;
@@ -2907,6 +2951,18 @@ td:last-child .row-remove {
   .ledger-filter-group,
   .month-filter-control,
   .month-filter-control select {
+    width: 100%;
+  }
+
+  .ledger-close-panel {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .ledger-close-actions {
+    display: grid;
+    grid-template-columns: 1fr;
     width: 100%;
   }
 

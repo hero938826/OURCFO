@@ -362,6 +362,18 @@
                   <span>조회 월</span>
                   <select id="ledgerMonthFilter" aria-label="가계부 조회 월"></select>
                 </label>
+                <div class="ledger-close-panel" aria-live="polite">
+                  <div class="ledger-close-copy">
+                    <span class="status-badge" id="ledgerMonthlyCloseStatus">마감 전</span>
+                    <strong id="ledgerMonthlyCloseMonth">-</strong>
+                    <small id="ledgerMonthlyCloseCaption">선택 월 데이터를 계산 중</small>
+                  </div>
+                  <div class="ledger-close-actions">
+                    <button class="text-button primary compact-button" id="closeSelectedMonthBtn">선택 월 마감</button>
+                    <button class="text-button secondary compact-button" id="editSelectedMonthlyCloseBtn" disabled>마감값 수정</button>
+                    <button class="text-button secondary compact-button" id="reapplySelectedMonthlyCloseBtn" disabled>선택 월 재반영</button>
+                  </div>
+                </div>
                 <div class="segmented-control" aria-label="가계부 필터">
                   <button class="active" data-ledger-filter="all">전체</button>
                   <button data-ledger-filter="수입">수입</button>
@@ -871,7 +883,7 @@
           <label><span>예산 소진률 (%)</span><input name="budgetBurnRate" type="number" step="0.1" required /></label>
           <label><span>투자원금</span><input name="investmentPrincipalKrw" class="krw-input" type="text" inputmode="numeric" required /></label>
           <label><span>투자 평가액</span><input name="investmentValueKrw" class="krw-input" type="text" inputmode="numeric" required /></label>
-          <div class="form-note">수정값은 해당 월 마감 기록에만 반영됩니다. 원본 데이터를 다시 계산하려면 홈의 현재 데이터 재반영 버튼을 사용하세요.</div>
+          <div class="form-note">수정값은 해당 월 마감 기록에만 반영됩니다. 원본 데이터를 다시 계산하려면 가계부 탭의 선택 월 재반영 버튼을 사용하세요.</div>
           <div class="modal-actions">
             <button type="button" class="text-button secondary" data-close-modal="monthlyCloseModal">취소</button>
             <button type="submit" class="text-button primary">수정 저장</button>
