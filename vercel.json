@@ -3,7 +3,8 @@
   "trailingSlash": false,
   "functions": {
     "api/*.js": {
-      "includeFiles": "data/ourcfo-seed.json"
+      "includeFiles": "data/ourcfo-seed.json",
+      "maxDuration": 30
     }
   },
   "headers": [

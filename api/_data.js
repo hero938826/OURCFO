@@ -368,5 +368,6 @@ function number(value) {
 module.exports = {
   apiHandler,
   budgetSummary,
+  loadState,
   snapshots
 };

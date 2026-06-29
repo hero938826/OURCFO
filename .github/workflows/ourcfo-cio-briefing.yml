@@ -1,0 +1,28 @@
+name: OurCFO CIO briefing
+
+on:
+  schedule:
+    - cron: "0 23 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ourcfo-cio-briefing
+  cancel-in-progress: true
+
+jobs:
+  send-cio-briefing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Send Telegram CIO briefing
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OURCFO_INITIAL_DATA_BASE64: ${{ secrets.OURCFO_INITIAL_DATA_BASE64 }}
+        run: node scripts/github-action-runner.cjs cio-briefing
