@@ -1,0 +1,26 @@
+name: OurCFO Supabase Migration
+
+on:
+  workflow_dispatch:
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      OURCFO_INITIAL_DATA_BASE64: ${{ secrets.OURCFO_INITIAL_DATA_BASE64 }}
+      OURCFO_INITIAL_DATA: ${{ secrets.OURCFO_INITIAL_DATA }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate required secrets
+        run: |
+          test -n "$SUPABASE_URL"
+          test -n "$SUPABASE_SERVICE_ROLE_KEY"
+          test -n "$OURCFO_INITIAL_DATA_BASE64$OURCFO_INITIAL_DATA"
+      - name: Upload seed data to Supabase
+        run: node scripts/github-action-runner.cjs migrate-seed-to-supabase

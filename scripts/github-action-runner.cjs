@@ -35,6 +35,19 @@ const tasks = {
       checked: result.checked,
       sent: result.sent.length
     };
+  },
+  "migrate-seed-to-supabase": async () => {
+    const { replaceSupabaseState } = require("../api/_state-sync.js");
+    const raw = process.env.OURCFO_INITIAL_DATA_BASE64
+      ? Buffer.from(process.env.OURCFO_INITIAL_DATA_BASE64, "base64").toString("utf8")
+      : process.env.OURCFO_INITIAL_DATA;
+
+    if (!raw) {
+      throw new Error("OURCFO_INITIAL_DATA_BASE64 or OURCFO_INITIAL_DATA is required.");
+    }
+
+    const saved = await replaceSupabaseState(JSON.parse(raw));
+    return { saved };
   }
 };
 
