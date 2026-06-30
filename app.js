@@ -2646,6 +2646,31 @@ function readGoalForm(data, key, prefix) {
   };
 }
 
+function chunkItems(items, size) {
+  const chunks = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+}
+
+async function fetchYahooQuotes(symbols, range = "1y", interval = "1d") {
+  const chunks = chunkItems(symbols, 20);
+  const payloads = await Promise.all(chunks.map(async (chunk) => {
+    const response = await fetch(
+      `/api/yahoo?symbols=${encodeURIComponent(chunk.join(","))}&range=${range}&interval=${interval}`,
+      { cache: "no-store" }
+    );
+    if (!response.ok) throw new Error(`Yahoo API ${response.status}`);
+    return response.json();
+  }));
+
+  return {
+    asOf: payloads.find((payload) => payload.asOf)?.asOf || new Date().toISOString(),
+    results: payloads.flatMap((payload) => payload.results || [])
+  };
+}
+
 async function loadMarketData() {
   const symbols = [
     ...MARKET_CONFIG.map((item) => item.symbol),
@@ -2656,25 +2681,14 @@ async function loadMarketData() {
   setMarketStatus("시장 데이터 불러오는 중", "");
 
   try {
-    const response = await fetch(
-      `/api/yahoo?symbols=${encodeURIComponent(unique.join(","))}&range=1y&interval=1d`,
-      { cache: "no-store" }
-    );
-    if (!response.ok) throw new Error(`Yahoo API ${response.status}`);
-    const payload = await response.json();
+    const payload = await fetchYahooQuotes(unique, "1y", "1d");
     (payload.results || []).forEach((quote) => {
       if (!quote.error) marketQuotes[quote.symbol] = quote;
     });
-    const highResponse = await fetch(
-      `/api/yahoo?symbols=${encodeURIComponent(WATCH_SYMBOLS.join(","))}&range=max&interval=1wk`,
-      { cache: "no-store" }
-    );
-    if (highResponse.ok) {
-      const highPayload = await highResponse.json();
-      (highPayload.results || []).forEach((quote) => {
-        if (!quote.error && marketQuotes[quote.symbol]) marketQuotes[quote.symbol].allTimeHigh = quote.allTimeHigh;
-      });
-    }
+    const highPayload = await fetchYahooQuotes(WATCH_SYMBOLS, "max", "1wk");
+    (highPayload.results || []).forEach((quote) => {
+      if (!quote.error && marketQuotes[quote.symbol]) marketQuotes[quote.symbol].allTimeHigh = quote.allTimeHigh;
+    });
     saveMarketCache();
     setMarketStatus("Yahoo Finance 연결됨", "ready");
     const updated = new Date(payload.asOf || Date.now());
