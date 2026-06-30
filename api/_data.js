@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const { TABLES } = require("./_state-sync.js");
 
 const DEFAULT_STATE = {
   ledgerEntries: [],
@@ -11,15 +12,6 @@ const DEFAULT_STATE = {
   monthlyClosings: {},
   inputOptions: { assetCategories: [] },
   excludedStockAccount: ""
-};
-
-const TABLES = {
-  assets: "ourcfo_assets",
-  stocks: "ourcfo_stock_holdings",
-  ledger: "ourcfo_ledger_entries",
-  budgets: "ourcfo_variable_budgets",
-  trades: "ourcfo_stock_transactions",
-  closings: "ourcfo_monthly_closings"
 };
 
 function json(res, status, payload) {
@@ -114,16 +106,19 @@ function loadSeedFile() {
 }
 
 async function loadSupabaseState() {
-  const [assetItems, stockHoldings, ledgerEntries, budgetRows, stockTransactions, closingRows] = await Promise.all([
+  const [assetItems, stockHoldings, ledgerEntries, budgetRows, stockTransactions, closingRows, metaRows] = await Promise.all([
     supabaseSelect(TABLES.assets, "month.asc,category.asc,name.asc"),
     supabaseSelect(TABLES.stocks, "created_at.asc"),
     supabaseSelect(TABLES.ledger, "date.desc"),
     supabaseSelect(TABLES.budgets, "month.asc"),
     supabaseSelect(TABLES.trades, "date.desc,created_at.desc"),
-    supabaseSelect(TABLES.closings, "month.asc")
+    supabaseSelect(TABLES.closings, "month.asc"),
+    supabaseSelect(TABLES.meta, "updated_at.desc").catch(() => [])
   ]);
+  const meta = metaRows.find((row) => row.state_key === "default")?.payload || {};
 
   return {
+    ...meta,
     assetItems,
     stockHoldings: stockHoldings.map(fromStockRow),
     ledgerEntries,

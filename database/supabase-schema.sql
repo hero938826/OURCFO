@@ -64,12 +64,19 @@ create table if not exists public.ourcfo_monthly_closings (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.ourcfo_state_meta (
+  state_key text primary key default 'default',
+  payload jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
 alter table public.ourcfo_assets enable row level security;
 alter table public.ourcfo_stock_holdings enable row level security;
 alter table public.ourcfo_ledger_entries enable row level security;
 alter table public.ourcfo_variable_budgets enable row level security;
 alter table public.ourcfo_stock_transactions enable row level security;
 alter table public.ourcfo_monthly_closings enable row level security;
+alter table public.ourcfo_state_meta enable row level security;
 
 create table if not exists public.market_daily (
   report_date date not null,

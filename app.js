@@ -1,6 +1,7 @@
 ﻿const STORAGE_KEY = "home-wealth-dashboard-v2";
 const LEGACY_STORAGE_KEY = "home-wealth-dashboard-v1";
 const MARKET_CACHE_KEY = "home-wealth-market-cache-v1";
+const REMOTE_STATE_ENDPOINT = "/api/state";
 const EXCLUDED_ACCOUNT = "메리츠W";
 const FIXED_EXPENSE_TYPE = "지출(고정)";
 const VARIABLE_EXPENSE_TYPE = "지출(변동)";
@@ -162,6 +163,9 @@ let toastTimer = null;
 let selectedLedgerIds = new Set();
 let optionManagerScope = null;
 let optionManagerDraft = [];
+let remoteStateEnabled = false;
+let remoteSaveTimer = null;
+let remoteSaveInFlight = false;
 
 function uid(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -386,10 +390,69 @@ function excludedStockAccount() {
   return state.excludedStockAccount || EXCLUDED_ACCOUNT;
 }
 
-function saveState() {
+function saveState({ remote = true } = {}) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   const label = document.getElementById("dataUpdatedAt");
   if (label) label.textContent = `${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} 저장됨`;
+  if (remote) queueRemoteStateSave();
+}
+
+async function hydrateRemoteState() {
+  try {
+    const response = await fetch(REMOTE_STATE_ENDPOINT, { headers: { accept: "application/json" } });
+    if (!response.ok) return;
+
+    const payload = await response.json();
+    remoteStateEnabled = payload.source === "supabase";
+    if (!remoteStateEnabled || !remoteHasData(payload.counts)) return;
+
+    state = normalizeState(payload.state || {});
+    saveState({ remote: false });
+    applyTheme();
+    renderAll();
+    const label = document.getElementById("dataUpdatedAt");
+    if (label) label.textContent = "온라인 DB에서 불러옴";
+  } catch {
+    remoteStateEnabled = false;
+  }
+}
+
+function remoteHasData(counts = {}) {
+  return Number(counts.assets) + Number(counts.stockHoldings) + Number(counts.ledgerEntries) + Number(counts.stockTransactions) > 0;
+}
+
+function queueRemoteStateSave() {
+  if (!remoteStateEnabled) return;
+  clearTimeout(remoteSaveTimer);
+  remoteSaveTimer = setTimeout(syncRemoteState, 900);
+}
+
+async function syncRemoteState() {
+  if (remoteSaveInFlight) {
+    queueRemoteStateSave();
+    return;
+  }
+
+  remoteSaveInFlight = true;
+  try {
+    const response = await fetch(REMOTE_STATE_ENDPOINT, {
+      method: "PUT",
+      headers: {
+        "content-type": "application/json",
+        "x-ourcfo-pin": ACCESS_PIN
+      },
+      body: JSON.stringify({ state })
+    });
+
+    if (!response.ok) throw new Error("remote sync failed");
+    const label = document.getElementById("dataUpdatedAt");
+    if (label) label.textContent = `${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} 온라인 저장됨`;
+  } catch {
+    const label = document.getElementById("dataUpdatedAt");
+    if (label) label.textContent = "로컬 저장됨 · 온라인 저장 대기";
+  } finally {
+    remoteSaveInFlight = false;
+  }
 }
 
 function loadMarketCache() {
@@ -3141,5 +3204,6 @@ document.getElementById("accessForm").addEventListener("submit", (event) => {
 enhanceInputUx();
 applyTheme();
 renderAll();
+hydrateRemoteState();
 loadMarketData();
 
