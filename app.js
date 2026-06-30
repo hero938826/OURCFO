@@ -980,14 +980,21 @@ function syncInputOptions() {
     const heldTickers = new Map();
     state.stockHoldings.forEach((item) => {
       const ticker = String(item.ticker || "").toUpperCase();
-      if (!ticker || heldTickers.has(ticker)) return;
+      const account = String(item.account || "").trim();
+      if (!ticker || !account) return;
       const country = item.country === "KR" ? "KR" : "US";
-      const flag = country === "KR" ? "KR" : "US";
-      heldTickers.set(ticker, `${flag} · ${item.account || ""} · ${Number(item.quantity || 0).toLocaleString("ko-KR")}주`);
+      const key = `${ticker}::${country}::${account}`;
+      const current = heldTickers.get(key) || { ticker, country, account, quantity: 0 };
+      current.quantity += Number(item.quantity || 0);
+      heldTickers.set(key, current);
     });
-    heldTickerList.innerHTML = [...heldTickers.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([ticker, label]) => `<option value="${escapeHtml(ticker)}" label="${escapeHtml(label)}"></option>`)
+    heldTickerList.innerHTML = [...heldTickers.values()]
+      .sort((a, b) => a.ticker.localeCompare(b.ticker) || a.account.localeCompare(b.account))
+      .map((item) => {
+        const value = `${item.ticker} · ${item.account}`;
+        const label = `${item.country} · ${Number(item.quantity || 0).toLocaleString("ko-KR", { maximumFractionDigits: 4 })}주`;
+        return `<option value="${escapeHtml(value)}" label="${escapeHtml(label)}"></option>`;
+      })
       .join("");
   }
   document.querySelectorAll("[data-account-select]").forEach((select) => {
@@ -1005,9 +1012,15 @@ function syncInputOptions() {
 function applyHeldTickerToTradeForm() {
   const form = document.getElementById("tradeForm");
   if (!form) return;
-  const ticker = String(form.elements.ticker.value || "").trim().toUpperCase();
+  const parsed = parseHeldTickerSelection(form.elements.ticker.value);
+  const ticker = parsed.ticker;
   if (!ticker) return;
-  const holding = state.stockHoldings.find((item) => String(item.ticker || "").toUpperCase() === ticker);
+  const currentAccount = String(form.elements.account.value || "");
+  const holding = state.stockHoldings.find((item) =>
+    String(item.ticker || "").toUpperCase() === ticker && parsed.account && item.account === parsed.account
+  ) || state.stockHoldings.find((item) =>
+    String(item.ticker || "").toUpperCase() === ticker && item.account === currentAccount
+  ) || state.stockHoldings.find((item) => String(item.ticker || "").toUpperCase() === ticker);
   if (!holding) return;
   form.elements.ticker.value = ticker;
   form.elements.country.value = holding.country === "KR" ? "KR" : "US";
@@ -1015,6 +1028,15 @@ function applyHeldTickerToTradeForm() {
     form.elements.account.value = holding.account;
   }
   syncLocalPriceInput(form);
+}
+
+function parseHeldTickerSelection(value) {
+  const raw = String(value || "").trim();
+  const [tickerPart, accountPart] = raw.split(" · ");
+  return {
+    ticker: String(tickerPart || "").trim().toUpperCase(),
+    account: String(accountPart || "").trim()
+  };
 }
 
 function openOptionManager(scope) {
@@ -2771,6 +2793,7 @@ document.getElementById("openStockCashModalBtn").addEventListener("click", () =>
 
 document.getElementById("openTradeModalBtn").addEventListener("click", () => {
   const form = document.getElementById("tradeForm");
+  syncInputOptions();
   form.reset();
   form.elements.date.value = todayDate();
   syncLocalPriceInput(form);
