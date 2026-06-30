@@ -417,6 +417,7 @@
               <h2 id="stocksTitle" data-ui-label="stocksPageTitle">주식 포트폴리오</h2>
             </div>
             <div class="page-actions">
+              <button class="text-button secondary" id="openStockCashModalBtn">예수금 입력</button>
               <button class="text-button secondary" id="openStockModalBtn">초기 잔고</button>
               <button class="text-button primary" id="openTradeModalBtn">매매 기록</button>
             </div>
@@ -490,6 +491,17 @@
               <div class="account-allocation-grid" id="accountAllocationGrid"></div>
             </article>
           </div>
+
+          <article class="surface stock-cash-surface">
+            <div class="section-heading compact">
+              <div>
+                <span class="section-kicker">Account Cash</span>
+                <h2>계좌 예수금</h2>
+              </div>
+              <button class="text-button secondary compact-button" data-open-modal="stockCashModal">예수금 수정</button>
+            </div>
+            <div class="stock-cash-grid" id="stockCashGrid"></div>
+          </article>
 
           <article class="surface table-surface">
             <div class="table-toolbar">
@@ -757,6 +769,29 @@
           <div class="modal-actions">
             <button type="button" class="text-button secondary" data-close-modal="stockModal">취소</button>
             <button type="submit" class="text-button primary">추가</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="stockCashModal" aria-hidden="true">
+      <div class="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="stockCashModalTitle">
+        <div class="modal-heading">
+          <div>
+            <span class="section-kicker">Account Cash</span>
+            <h2 id="stockCashModalTitle">계좌 예수금 입력</h2>
+          </div>
+          <button class="close-button" data-close-modal="stockCashModal" aria-label="닫기">×</button>
+        </div>
+        <form id="stockCashForm" class="form-grid single-column">
+          <label><span>메리츠M 달러 예수금</span><input name="메리츠M" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" /></label>
+          <label><span>메리츠W 달러 예수금</span><input name="메리츠W" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" /></label>
+          <label><span>카카오연금 원화 예수금</span><input name="카카오연금" class="krw-input" type="text" inputmode="numeric" autocomplete="off" placeholder="0" /></label>
+          <label><span>미래에셋ISA 원화 예수금</span><input name="미래에셋ISA" class="krw-input" type="text" inputmode="numeric" autocomplete="off" placeholder="0" /></label>
+          <div class="form-note">메리츠W 예수금은 화면에 표시되지만 전체 주식 자산가치와 자산현황 집계에서는 제외됩니다.</div>
+          <div class="modal-actions">
+            <button type="button" class="text-button secondary" data-close-modal="stockCashModal">취소</button>
+            <button type="submit" class="text-button primary">저장</button>
           </div>
         </form>
       </div>

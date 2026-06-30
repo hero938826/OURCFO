@@ -8,11 +8,19 @@ const DEFAULT_STATE = {
   assetItems: [],
   variableBudgets: {},
   stockTransactions: [],
+  stockCashBalances: {},
   stockValueHistory: {},
   monthlyClosings: {},
   inputOptions: { assetCategories: [] },
   excludedStockAccount: ""
 };
+
+const STOCK_CASH_CONFIG = [
+  { account: "메리츠M", currency: "USD", excluded: false },
+  { account: "메리츠W", currency: "USD", excluded: true },
+  { account: "카카오연금", currency: "KRW", excluded: false },
+  { account: "미래에셋ISA", currency: "KRW", excluded: false }
+];
 
 function json(res, status, payload) {
   res.statusCode = status;
@@ -186,8 +194,22 @@ function normalizeState(input) {
       costBasisKrw: number(item.costBasisKrw ?? item.cost_basis_krw),
       realizedProfitKrw: number(item.realizedProfitKrw ?? item.realized_profit_krw)
     })),
+    stockCashBalances: normalizeStockCashBalances(data.stockCashBalances),
     monthlyClosings: object(data.monthlyClosings)
   };
+}
+
+function normalizeStockCashBalances(saved = {}) {
+  return Object.fromEntries(
+    STOCK_CASH_CONFIG.map((config) => {
+      const item = saved?.[config.account] || {};
+      return [config.account, {
+        amount: number(item.amount),
+        currency: config.currency,
+        updatedAt: string(item.updatedAt)
+      }];
+    })
+  );
 }
 
 function fromStockRow(row) {
@@ -248,24 +270,39 @@ function snapshots(state, options = {}) {
 
   const excluded = state.excludedStockAccount;
   const included = excluded ? holdings.filter((item) => item.account !== excluded) : holdings;
+  const cashBalances = STOCK_CASH_CONFIG.map((config) => {
+    const balance = state.stockCashBalances?.[config.account] || {};
+    const amount = number(balance.amount);
+    const valueKrw = config.currency === "USD" ? amount * fxRate : amount;
+    return { ...config, amount, valueKrw, valueUsd: valueKrw / fxRate };
+  });
+  const includedCash = cashBalances.filter((item) => !item.excluded && item.account !== excluded);
+  const excludedCash = cashBalances.filter((item) => item.excluded || item.account === excluded);
   const latestAssets = latestAssetItems(state.assetItems);
   const realEstate = sum(latestAssets.filter((item) => assetType(state, item.category) === "realEstate"));
   const manualFinancial = sum(latestAssets.filter((item) => assetType(state, item.category) === "financial"));
   const vehicle = sum(latestAssets.filter((item) => assetType(state, item.category) === "vehicle"));
   const debt = sum(latestAssets.filter((item) => assetType(state, item.category) === "debt"));
-  const stockFinancial = sum(included, (item) => item.valueKrw);
+  const stockFinancial = sum(included, (item) => item.valueKrw) + sum(includedCash, (item) => item.valueKrw);
   const financial = manualFinancial + stockFinancial;
   const grossAssets = realEstate + financial + vehicle;
+  const accounts = groupSum(included, "account", "valueKrw");
+  includedCash.forEach((item) => {
+    accounts[item.account] = (accounts[item.account] || 0) + item.valueKrw;
+  });
 
   return {
     holdings,
     portfolio: {
       holdings,
       included,
+      cashBalances,
+      includedCash,
+      excludedCash,
       valueKrw: stockFinancial,
       costKrw: sum(included, (item) => item.costKrw),
       profitKrw: sum(included, (item) => item.profitKrw),
-      accounts: groupSum(included, "account", "valueKrw"),
+      accounts,
       tickers: groupSum(included, "ticker", "valueKrw")
     },
     assets: {

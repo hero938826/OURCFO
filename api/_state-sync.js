@@ -90,6 +90,7 @@ async function replaceSupabaseState(state) {
       financialGoal: normalized.financialGoal,
       financialGoalStartMonth: normalized.financialGoalStartMonth,
       financialGoalEndMonth: normalized.financialGoalEndMonth,
+      stockCashBalances: normalized.stockCashBalances || {},
       stockValueHistory: normalized.stockValueHistory || {},
       inputOptions: normalized.inputOptions || {},
       excludedStockAccount: normalized.excludedStockAccount || "",
@@ -104,7 +105,8 @@ async function replaceSupabaseState(state) {
     assets: (normalized.assetItems || []).length,
     stockHoldings: (normalized.stockHoldings || []).length,
     ledgerEntries: (normalized.ledgerEntries || []).length,
-    stockTransactions: (normalized.stockTransactions || []).length
+    stockTransactions: (normalized.stockTransactions || []).length,
+    stockCashBalances: Object.values(normalized.stockCashBalances || {}).filter((item) => Number(item?.amount) > 0).length
   };
 }
 

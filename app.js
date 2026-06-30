@@ -24,6 +24,12 @@ const LEDGER_PAGE_SIZE = 30;
 const STOCK_PAGE_SIZE = 15;
 const ASSET_PAGE_SIZE = 30;
 const INCLUDED_ACCOUNTS = ["카카오연금", "미래에셋ISA", "메리츠M"];
+const STOCK_CASH_CONFIG = [
+  { account: "메리츠M", currency: "USD", excluded: false },
+  { account: "메리츠W", currency: "USD", excluded: true },
+  { account: "카카오연금", currency: "KRW", excluded: false },
+  { account: "미래에셋ISA", currency: "KRW", excluded: false }
+];
 const DEFAULT_INPUT_OPTIONS = {
   ledgerCategories: ["H급여", "M급여", "H보너스", "M보너스", "이자", "관리비", "가스비", "보험료", "통신비", "자동차 할부", "식비", "준원돌봄", "생활용품", "예/적금", "연금저축", "ISA(경주)", "해외직투", "예비비", "기타"],
   ledgerPayments: ["-", "삼성M", "국민M", "생활비계좌", "현대H", "비씨M", "비씨H", "신한M", "안양페이M", "안양페이H", "토스적금", "카카오연금M", "카카오연금H", "미래에셋M", "메리츠M", "메리츠W", "네이버CMA"],
@@ -133,6 +139,7 @@ const sampleData = {
   financialGoalEndMonth: todayMonth(),
   variableBudgets: {},
   stockTransactions: [],
+  stockCashBalances: {},
   stockValueHistory: {},
   monthlyClosings: {},
   inputOptions: structuredClone(DEFAULT_INPUT_OPTIONS),
@@ -265,6 +272,7 @@ function normalizeState(data) {
       memo: String(item.memo || ""),
       createdAt: Number(item.createdAt) || Date.now()
     })),
+    stockCashBalances: normalizeStockCashBalances(data.stockCashBalances),
     stockValueHistory: Object.fromEntries(
       Object.entries(data.stockValueHistory || {}).map(([month, values]) => [
         month,
@@ -369,6 +377,22 @@ function normalizeV2Goals(saved = {}) {
   );
 }
 
+function normalizeStockCashBalances(saved = {}) {
+  return Object.fromEntries(
+    STOCK_CASH_CONFIG.map((config) => {
+      const item = saved?.[config.account] || {};
+      return [
+        config.account,
+        {
+          amount: Number(item.amount) || 0,
+          currency: config.currency,
+          updatedAt: item.updatedAt || ""
+        }
+      ];
+    })
+  );
+}
+
 function normalizeAssetCategories(saved, items = []) {
   const source = Array.isArray(saved) && saved.length ? saved : DEFAULT_INPUT_OPTIONS.assetCategories;
   const normalized = source.map((item) =>
@@ -418,7 +442,7 @@ async function hydrateRemoteState() {
 }
 
 function remoteHasData(counts = {}) {
-  return Number(counts.assets) + Number(counts.stockHoldings) + Number(counts.ledgerEntries) + Number(counts.stockTransactions) > 0;
+  return Number(counts.assets) + Number(counts.stockHoldings) + Number(counts.ledgerEntries) + Number(counts.stockTransactions) + Number(counts.stockCashBalances) > 0;
 }
 
 function queueRemoteStateSave() {
@@ -573,6 +597,32 @@ function localPrice(value, country) {
   return country === "KR" ? fullMoney(value) : usd(value);
 }
 
+function stockCashConfig(account) {
+  return STOCK_CASH_CONFIG.find((item) => item.account === account);
+}
+
+function stockCashBalances() {
+  return STOCK_CASH_CONFIG.map((config) => {
+    const balance = state.stockCashBalances?.[config.account] || {};
+    const amount = Number(balance.amount) || 0;
+    const valueKrw = config.currency === "USD" ? amount * usdKrwRate() : amount;
+    return {
+      ...config,
+      amount,
+      valueKrw,
+      valueUsd: valueKrw / usdKrwRate(),
+      updatedAt: balance.updatedAt || ""
+    };
+  });
+}
+
+function formatStockCashAmount(balance) {
+  if (balance.currency === "USD") {
+    return `${Number(balance.amount || 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}달러`;
+  }
+  return fullMoney(balance.amount);
+}
+
 function holdingMetrics(holding) {
   const quote = quoteFor(holding.ticker);
   const currentPrice = Number(quote?.price);
@@ -616,22 +666,33 @@ function portfolioSnapshot() {
   const holdings = state.stockHoldings.map(holdingMetrics);
   const included = holdings.filter((item) => item.account !== excludedStockAccount());
   const excluded = holdings.filter((item) => item.account === excludedStockAccount());
-  const valueKrw = sum(included, (item) => item.valueKrw);
+  const cashBalances = stockCashBalances();
+  const includedCash = cashBalances.filter((item) => !item.excluded && item.account !== excludedStockAccount());
+  const excludedCash = cashBalances.filter((item) => item.excluded || item.account === excludedStockAccount());
+  const holdingsValueKrw = sum(included, (item) => item.valueKrw);
+  const includedCashKrw = sum(includedCash, (item) => item.valueKrw);
+  const valueKrw = holdingsValueKrw + includedCashKrw;
   const costKrw = sum(included, (item) => item.costUsd * usdKrwRate());
-  const profitKrw = valueKrw - costKrw;
+  const profitKrw = holdingsValueKrw - costKrw;
 
   return {
     holdings,
     included,
     excluded,
+    cashBalances,
+    includedCash,
+    excludedCash,
+    includedCashKrw,
+    excludedCashKrw: sum(excludedCash, (item) => item.valueKrw),
+    holdingsValueKrw,
     valueKrw,
-    valueUsd: sum(included, (item) => item.valueUsd),
+    valueUsd: valueKrw / usdKrwRate(),
     costKrw,
     profitKrw,
     returnRate: costKrw ? (profitKrw / costKrw) * 100 : 0,
     annualDividendKrw: sum(included, (item) => item.annualDividendKrw),
-    dividendYield: valueKrw ? (sum(included, (item) => item.annualDividendKrw) / valueKrw) * 100 : 0,
-    excludedValueKrw: sum(excluded, (item) => item.valueKrw)
+    dividendYield: holdingsValueKrw ? (sum(included, (item) => item.annualDividendKrw) / holdingsValueKrw) * 100 : 0,
+    excludedValueKrw: sum(excluded, (item) => item.valueKrw) + sum(excludedCash, (item) => item.valueKrw)
   };
 }
 
@@ -1795,6 +1856,7 @@ function renderStocks() {
   setText("stockMeritzWValue", money(portfolio.excludedValueKrw));
   setText("stockCount", `${portfolio.included.length}종목`);
   setText("stockFxRate", `적용 환율 1 USD = ${usdKrwRate().toLocaleString("ko-KR", { maximumFractionDigits: 2 })}원`);
+  renderStockCashBalances(portfolio);
   const stockUnlocked = !state.editorLocks.stocks;
   const stockLockButton = document.getElementById("stockEditToggle");
   stockLockButton.setAttribute("aria-pressed", String(stockUnlocked));
@@ -1841,6 +1903,37 @@ function renderStocks() {
   renderStockGrowthCharts();
   renderStockTransactions();
   renderMeritzW(portfolio.excluded);
+}
+
+function renderStockCashBalances(portfolio = portfolioSnapshot()) {
+  const grid = document.getElementById("stockCashGrid");
+  if (!grid) return;
+  grid.innerHTML = "";
+  portfolio.cashBalances.forEach((balance) => {
+    const card = document.createElement("section");
+    card.className = `stock-cash-card${balance.excluded ? " excluded" : ""}`;
+    card.innerHTML = `
+      <div>
+        <span>${escapeHtml(balance.account)}</span>
+        <small>${balance.currency === "USD" ? "Dollar Cash" : "KRW Cash"}${balance.excluded ? " · 합산 제외" : ""}</small>
+      </div>
+      <strong>${formatStockCashAmount(balance)}</strong>
+      <small>${balance.currency === "USD" ? money(balance.valueKrw) : "원화 예수금"}${balance.updatedAt ? ` · ${new Date(balance.updatedAt).toLocaleDateString("ko-KR")}` : ""}</small>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+function fillStockCashForm() {
+  const form = document.getElementById("stockCashForm");
+  STOCK_CASH_CONFIG.forEach((config) => {
+    const input = form.elements[config.account];
+    const balance = state.stockCashBalances?.[config.account] || {};
+    if (!input) return;
+    input.value = config.currency === "KRW"
+      ? (Number(balance.amount) ? Number(balance.amount).toLocaleString("ko-KR") : "")
+      : (Number(balance.amount) ? String(Number(balance.amount)) : "");
+  });
 }
 
 function recordStockValueSnapshot(portfolio) {
@@ -1977,7 +2070,9 @@ function renderAccountAllocations(holdings) {
   grid.innerHTML = "";
   state.inputOptions.stockAccounts.filter((account) => account !== excludedStockAccount()).forEach((account) => {
     const accountItems = holdings.filter((item) => item.account === account);
-    const total = sum(accountItems, (item) => item.valueKrw);
+    const accountCash = stockCashBalances().find((item) => item.account === account);
+    const cashValue = accountCash?.valueKrw || 0;
+    const total = sum(accountItems, (item) => item.valueKrw) + cashValue;
     const grouped = new Map();
     accountItems.forEach((item) => grouped.set(item.ticker, (grouped.get(item.ticker) || 0) + item.valueKrw));
     const card = document.createElement("section");
@@ -1985,7 +2080,7 @@ function renderAccountAllocations(holdings) {
     const chartId = `accountDonut-${account.replace(/[^a-zA-Z0-9가-힣]/g, "")}`;
     const legendId = `${chartId}-legend`;
     card.innerHTML = `
-      <div class="account-card-heading"><strong>${account}</strong><span>${money(total)}</span></div>
+      <div class="account-card-heading"><strong>${account}</strong><span>${money(total)} · 예수금 ${accountCash ? formatStockCashAmount(accountCash) : "-"}</span></div>
       <div class="account-donut-layout">
         <canvas id="${chartId}" width="170" height="170" aria-label="${account} 계좌 내 종목 비중"></canvas>
         <div class="chart-legend compact-legend" id="${legendId}"></div>
@@ -2669,6 +2764,11 @@ document.getElementById("openStockModalBtn").addEventListener("click", () => {
   openModal("stockModal");
 });
 
+document.getElementById("openStockCashModalBtn").addEventListener("click", () => {
+  fillStockCashForm();
+  openModal("stockCashModal");
+});
+
 document.getElementById("openTradeModalBtn").addEventListener("click", () => {
   const form = document.getElementById("tradeForm");
   form.reset();
@@ -2851,6 +2951,27 @@ document.getElementById("stockForm").addEventListener("submit", async (event) =>
   renderAll();
   showToast(`${ticker} 종목을 추가했어요. 시세를 확인합니다.`);
   await loadMarketData();
+});
+
+document.getElementById("stockCashForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  state.stockCashBalances = normalizeStockCashBalances(
+    Object.fromEntries(
+      STOCK_CASH_CONFIG.map((config) => [
+        config.account,
+        {
+          amount: inputNumber(data.get(config.account)),
+          currency: config.currency,
+          updatedAt: new Date().toISOString()
+        }
+      ])
+    )
+  );
+  saveState();
+  closeModal("stockCashModal");
+  renderAll();
+  showToast("계좌 예수금을 저장했어요.");
 });
 
 document.getElementById("tradeForm").addEventListener("submit", async (event) => {
@@ -3065,6 +3186,9 @@ document.addEventListener("click", (event) => {
     const modalId = modalButton.dataset.openModal;
     if (modalId === "goalModal") {
       fillGoalForm();
+    }
+    if (modalId === "stockCashModal") {
+      fillStockCashForm();
     }
     openModal(modalId);
     return;

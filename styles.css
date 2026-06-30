@@ -1080,6 +1080,49 @@ h2 {
   font-weight: 750;
 }
 
+.stock-cash-surface {
+  display: grid;
+  gap: 16px;
+}
+
+.stock-cash-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.stock-cash-card {
+  display: grid;
+  gap: 10px;
+  min-height: 126px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 15px;
+  background: color-mix(in srgb, var(--surface-soft) 82%, transparent);
+}
+
+.stock-cash-card.excluded {
+  border-color: color-mix(in srgb, var(--violet) 30%, var(--line));
+}
+
+.stock-cash-card div {
+  display: grid;
+  gap: 3px;
+}
+
+.stock-cash-card span,
+.stock-cash-card small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.stock-cash-card strong {
+  color: var(--text);
+  font-size: clamp(21px, 2.4vw, 28px);
+  line-height: 1.05;
+}
+
 .account-bars,
 .account-bar-row {
   display: grid;
@@ -2934,8 +2977,12 @@ td:last-child .row-remove {
     grid-template-columns: 1fr;
   }
 
-.account-allocation-card {
+  .account-allocation-card {
     min-height: 0;
+  }
+
+  .stock-cash-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .budget-heading {
@@ -3008,6 +3055,10 @@ td:last-child .row-remove {
 
   .page-actions .text-button {
     flex: 1;
+  }
+
+  .stock-cash-grid {
+    grid-template-columns: 1fr;
   }
 
   .stock-treemap {

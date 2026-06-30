@@ -83,6 +83,7 @@ function counts(state) {
     assets: (state.assetItems || []).length,
     stockHoldings: (state.stockHoldings || []).length,
     ledgerEntries: (state.ledgerEntries || []).length,
-    stockTransactions: (state.stockTransactions || []).length
+    stockTransactions: (state.stockTransactions || []).length,
+    stockCashBalances: Object.values(state.stockCashBalances || {}).filter((item) => Number(item?.amount) > 0).length
   };
 }

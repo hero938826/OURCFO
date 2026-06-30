@@ -14,6 +14,7 @@ module.exports = (req, res) =>
           accounts: portfolio.accounts,
           tickers: portfolio.tickers
         },
+        cashBalances: portfolio.cashBalances,
         holdings: portfolio.included
       }
     };

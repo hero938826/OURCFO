@@ -5,6 +5,7 @@ module.exports = (req, res) =>
     const { portfolio } = snapshots(state);
     return {
       data: portfolio.holdings,
+      cashBalances: portfolio.cashBalances,
       transactions: state.stockTransactions,
       totals: {
         valueKrw: portfolio.valueKrw,
