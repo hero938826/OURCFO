@@ -48,8 +48,66 @@ const tasks = {
 
     const saved = await replaceSupabaseState(JSON.parse(raw));
     return { saved };
+  },
+  "ensure-reports-storage": async () => {
+    const bucket = process.env.OURCFO_REPORTS_BUCKET || "ourcfo-reports";
+    const base = requiredEnv("SUPABASE_URL").replace(/\/$/, "");
+    const key = requiredEnv("SUPABASE_SERVICE_ROLE_KEY");
+    const headers = {
+      apikey: key,
+      authorization: `Bearer ${key}`,
+      "content-type": "application/json"
+    };
+
+    const read = await fetch(`${base}/storage/v1/bucket/${encodeURIComponent(bucket)}`, { headers });
+    if (read.status === 404) {
+      const created = await fetch(`${base}/storage/v1/bucket`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          id: bucket,
+          name: bucket,
+          public: false,
+          allowed_mime_types: ["application/pdf"],
+          file_size_limit: 20_000_000
+        })
+      });
+      if (!created.ok && created.status !== 409) {
+        throw new Error(`Supabase bucket create failed: ${created.status} ${await created.text()}`.trim());
+      }
+      return { bucket, visibility: "private", action: "created" };
+    }
+
+    if (!read.ok) {
+      throw new Error(`Supabase bucket read failed: ${read.status} ${await read.text()}`.trim());
+    }
+
+    const current = await read.json();
+    if (current.public === true) {
+      const updated = await fetch(`${base}/storage/v1/bucket/${encodeURIComponent(bucket)}`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({
+          public: false,
+          allowed_mime_types: ["application/pdf"],
+          file_size_limit: 20_000_000
+        })
+      });
+      if (!updated.ok) {
+        throw new Error(`Supabase bucket update failed: ${updated.status} ${await updated.text()}`.trim());
+      }
+      return { bucket, visibility: "private", action: "updated" };
+    }
+
+    return { bucket, visibility: "private", action: "already-ready" };
   }
 };
+
+function requiredEnv(name) {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} is required.`);
+  return value;
+}
 
 async function main() {
   const taskName = process.argv[2];
@@ -58,8 +116,59 @@ async function main() {
     throw new Error(`Unknown OurCFO task: ${taskName || "(missing)"}`);
   }
 
+  const scheduleGuard = scheduledTaskGuard(taskName);
+  if (scheduleGuard.skipped) {
+    console.log(JSON.stringify({ ok: true, task: taskName, ...scheduleGuard }, null, 2));
+    return;
+  }
+
   const result = await task();
   console.log(JSON.stringify({ ok: true, task: taskName, ...result }, null, 2));
+}
+
+function scheduledTaskGuard(taskName) {
+  if (process.env.GITHUB_EVENT_NAME !== "schedule") return { skipped: false };
+
+  const windows = {
+    "cio-briefing": { start: 8 * 60, end: 8 * 60 + 29, label: "08:00-08:29 KST" },
+    "nasdaq-drawdowns": { start: 8 * 60 + 30, end: 8 * 60 + 59, label: "08:30-08:59 KST" },
+    "economy-lesson": { start: 9 * 60, end: 9 * 60 + 59, label: "09:00-09:59 KST" }
+  };
+
+  const window = windows[taskName];
+  if (!window) return { skipped: false };
+
+  const now = kstNowParts();
+  const minuteOfDay = now.hour * 60 + now.minute;
+  const skipped = minuteOfDay < window.start || minuteOfDay > window.end;
+  return {
+    skipped,
+    reason: skipped ? `Outside scheduled KST window ${window.label}` : undefined,
+    kstTime: now.label,
+    allowedWindow: window.label
+  };
+}
+
+function kstNowParts() {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Seoul",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23"
+    })
+      .formatToParts(new Date())
+      .map((part) => [part.type, part.value])
+  );
+
+  return {
+    hour: Number(parts.hour),
+    minute: Number(parts.minute),
+    label: `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`
+  };
 }
 
 main().catch((error) => {
