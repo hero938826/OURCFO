@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { TABLES } = require("./_state-sync.js");
+const { hasSupabase, supabaseBaseUrl, supabaseHeaders } = require("./_supabase.js");
 
 const DEFAULT_STATE = {
   ledgerEntries: [],
@@ -11,6 +12,7 @@ const DEFAULT_STATE = {
   stockCashBalances: {},
   stockValueHistory: {},
   monthlyClosings: {},
+  reports: [],
   inputOptions: { assetCategories: [] },
   excludedStockAccount: ""
 };
@@ -73,7 +75,7 @@ function currentSource() {
 }
 
 function usesSupabase() {
-  return Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+  return hasSupabase();
 }
 
 function loadSeedState() {
@@ -114,13 +116,14 @@ function loadSeedFile() {
 }
 
 async function loadSupabaseState() {
-  const [assetItems, stockHoldings, ledgerEntries, budgetRows, stockTransactions, closingRows, metaRows] = await Promise.all([
+  const [assetItems, stockHoldings, ledgerEntries, budgetRows, stockTransactions, closingRows, reportRows, metaRows] = await Promise.all([
     supabaseSelect(TABLES.assets, "month.asc,category.asc,name.asc"),
     supabaseSelect(TABLES.stocks, "created_at.asc"),
     supabaseSelect(TABLES.ledger, "date.desc"),
     supabaseSelect(TABLES.budgets, "month.asc"),
     supabaseSelect(TABLES.trades, "date.desc,created_at.desc"),
     supabaseSelect(TABLES.closings, "month.asc"),
+    supabaseSelect(TABLES.reports, "year.desc,month.desc").catch(() => []),
     supabaseSelect(TABLES.meta, "updated_at.desc").catch(() => [])
   ]);
   const meta = metaRows.find((row) => row.state_key === "default")?.payload || {};
@@ -132,20 +135,18 @@ async function loadSupabaseState() {
     ledgerEntries,
     variableBudgets: Object.fromEntries(budgetRows.map((row) => [row.month, Number(row.amount) || 0])),
     stockTransactions: stockTransactions.map(fromTradeRow),
-    monthlyClosings: Object.fromEntries(closingRows.map((row) => [row.month, fromClosingRow(row)]))
+    monthlyClosings: Object.fromEntries(closingRows.map((row) => [row.month, fromClosingRow(row)])),
+    reports: reportRows.length ? reportRows.map(fromReportRow) : array(meta.reports)
   };
 }
 
 async function supabaseSelect(table, order) {
-  const url = new URL(`${process.env.SUPABASE_URL.replace(/\/$/, "")}/rest/v1/${table}`);
+  const url = new URL(`${supabaseBaseUrl()}/rest/v1/${table}`);
   url.searchParams.set("select", "*");
   if (order) url.searchParams.set("order", order);
 
   const response = await fetch(url, {
-    headers: {
-      apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-      authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`
-    }
+    headers: supabaseHeaders()
   });
 
   if (!response.ok) {
@@ -195,7 +196,8 @@ function normalizeState(input) {
       realizedProfitKrw: number(item.realizedProfitKrw ?? item.realized_profit_krw)
     })),
     stockCashBalances: normalizeStockCashBalances(data.stockCashBalances),
-    monthlyClosings: object(data.monthlyClosings)
+    monthlyClosings: object(data.monthlyClosings),
+    reports: array(data.reports)
   };
 }
 
@@ -254,6 +256,41 @@ function fromClosingRow(row) {
     investmentProfitKrw: number(row.investment_profit_krw),
     investmentReturnRate: number(row.investment_return_rate),
     closedAt: row.closed_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function fromReportRow(row) {
+  const events = object(row.events_json);
+  return {
+    id: row.id,
+    year: number(row.year),
+    month: String(row.month).padStart(2, "0"),
+    title: row.title,
+    summary: row.summary,
+    totalAssets: number(row.total_assets),
+    netWorth: number(row.net_worth),
+    stockValue: number(row.stock_value),
+    isaValue: number(row.isa_value),
+    pensionValue: number(row.pension_value),
+    cashValue: number(row.cash_value),
+    debtValue: number(row.debt_value),
+    monthlyChange: number(row.monthly_change),
+    stockMonthlyChange: number(events.stockMonthlyChange),
+    cashMonthlyChange: number(events.cashMonthlyChange),
+    debtMonthlyChange: number(events.debtMonthlyChange),
+    goalProgressRate: number(row.goal_progress_rate),
+    cfoScore: number(row.cfo_score),
+    aiCioComment: string(events.aiCioComment),
+    portfolioSnapshot: object(row.portfolio_snapshot_json),
+    events,
+    highlights: array(events.highlights),
+    improvements: array(events.improvements),
+    actionPlan: array(row.action_plan_json),
+    ceoLetter: row.ceo_letter,
+    pdfUrl: row.pdf_url,
+    pdfFileName: string(events.pdfFileName),
+    createdAt: row.created_at,
     updatedAt: row.updated_at
   };
 }

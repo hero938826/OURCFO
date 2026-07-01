@@ -1,3 +1,5 @@
+const { hasSupabase, supabaseBaseUrl, supabaseHeaders } = require("./_supabase.js");
+
 const TABLES = {
   assets: "ourcfo_assets",
   stocks: "ourcfo_stock_holdings",
@@ -5,11 +7,12 @@ const TABLES = {
   budgets: "ourcfo_variable_budgets",
   trades: "ourcfo_stock_transactions",
   closings: "ourcfo_monthly_closings",
+  reports: "ourcfo_reports",
   meta: "ourcfo_state_meta"
 };
 
 function hasSupabaseWrite() {
-  return Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+  return hasSupabase();
 }
 
 async function replaceSupabaseState(state) {
@@ -84,6 +87,42 @@ async function replaceSupabaseState(state) {
     updated_at: item.updatedAt || new Date().toISOString()
   })));
 
+  const reportRows = (normalized.reports || []).map((item) => ({
+    id: item.id,
+    year: Number(item.year) || 0,
+    month: Number(item.month) || 0,
+    title: item.title || "",
+    summary: item.summary || "",
+    total_assets: Number(item.totalAssets) || 0,
+    net_worth: Number(item.netWorth) || 0,
+    stock_value: Number(item.stockValue) || 0,
+    isa_value: Number(item.isaValue) || 0,
+    pension_value: Number(item.pensionValue) || 0,
+    cash_value: Number(item.cashValue) || 0,
+    debt_value: Number(item.debtValue) || 0,
+    monthly_change: Number(item.monthlyChange) || 0,
+    goal_progress_rate: Number(item.goalProgressRate) || 0,
+    cfo_score: Number(item.cfoScore) || 0,
+    portfolio_snapshot_json: item.portfolioSnapshot || {},
+    events_json: {
+      ...(item.events || {}),
+      highlights: item.highlights || [],
+      improvements: item.improvements || [],
+      aiCioComment: item.aiCioComment || "",
+      stockMonthlyChange: Number(item.stockMonthlyChange) || 0,
+      cashMonthlyChange: Number(item.cashMonthlyChange) || 0,
+      debtMonthlyChange: Number(item.debtMonthlyChange) || 0,
+      pdfFileName: item.pdfFileName || ""
+    },
+    action_plan_json: item.actionPlan || [],
+    ceo_letter: item.ceoLetter || "",
+    pdf_url: item.pdfUrl || "",
+    created_at: item.createdAt || new Date().toISOString(),
+    updated_at: item.updatedAt || new Date().toISOString()
+  }));
+
+  const reportsTableAvailable = await tryUpsert(TABLES.reports, reportRows);
+
   await upsert(TABLES.meta, [{
     state_key: "default",
     payload: {
@@ -96,6 +135,7 @@ async function replaceSupabaseState(state) {
       excludedStockAccount: normalized.excludedStockAccount || "",
       editorLocks: normalized.editorLocks || {},
       uiConfig: normalized.uiConfig || {},
+      reports: reportsTableAvailable ? [] : (normalized.reports || []),
       theme: normalized.theme || "light"
     },
     updated_at: new Date().toISOString()
@@ -106,6 +146,7 @@ async function replaceSupabaseState(state) {
     stockHoldings: (normalized.stockHoldings || []).length,
     ledgerEntries: (normalized.ledgerEntries || []).length,
     stockTransactions: (normalized.stockTransactions || []).length,
+    reports: (normalized.reports || []).length,
     stockCashBalances: Object.values(normalized.stockCashBalances || {}).filter((item) => Number(item?.amount) > 0).length
   };
 }
@@ -122,6 +163,7 @@ async function deleteExistingState() {
   ]) {
     await supabaseDeleteAll(table, column);
   }
+  await tryDeleteAll(TABLES.reports, "id");
 }
 
 async function supabaseDeleteAll(table, column) {
@@ -160,15 +202,29 @@ async function upsert(table, rows) {
   }
 }
 
-function supabaseBaseUrl() {
-  return process.env.SUPABASE_URL.replace(/\/$/, "");
+async function tryUpsert(table, rows) {
+  try {
+    await upsert(table, rows);
+    return true;
+  } catch (error) {
+    if (isMissingTableError(error)) return false;
+    throw error;
+  }
 }
 
-function supabaseHeaders() {
-  return {
-    apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-    authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`
-  };
+async function tryDeleteAll(table, column) {
+  try {
+    await supabaseDeleteAll(table, column);
+    return true;
+  } catch (error) {
+    if (isMissingTableError(error)) return false;
+    throw error;
+  }
+}
+
+function isMissingTableError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /404|PGRST205|does not exist|not found|schema cache/i.test(message);
 }
 
 function toIso(value) {

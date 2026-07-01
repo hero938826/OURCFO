@@ -1,11 +1,8 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
+const { hasSupabase, supabaseBaseUrl, supabaseHeaders } = require("./_supabase.js");
 
 require("./_env.js").loadLocalEnv();
-
-function hasSupabase() {
-  return Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
-}
 
 async function saveCioRun(report) {
   await Promise.allSettled([saveToSupabase(report), appendCsvBackup(report)]);
@@ -143,17 +140,6 @@ async function supabaseUpsert(table, rows, onConflict) {
     const text = await response.text().catch(() => "");
     throw new Error(`Supabase ${table} upsert failed: ${response.status} ${text}`.trim());
   }
-}
-
-function supabaseBaseUrl() {
-  return process.env.SUPABASE_URL.replace(/\/$/, "");
-}
-
-function supabaseHeaders() {
-  return {
-    apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-    authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`
-  };
 }
 
 async function appendCsvBackup(report) {

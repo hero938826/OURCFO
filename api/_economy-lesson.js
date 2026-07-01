@@ -4,6 +4,7 @@ const path = require("node:path");
 const { requireCronAuth } = require("./_cio.js");
 const { collectNewsData } = require("./_news.js");
 const { sendTelegramMessage } = require("./_telegram.js");
+const { hasSupabase, supabaseBaseUrl, supabaseHeaders } = require("./_supabase.js");
 
 require("./_env.js").loadLocalEnv();
 
@@ -457,21 +458,6 @@ async function supabaseUpsert(table, rows, onConflict) {
     const text = await response.text().catch(() => "");
     throw new Error(`Supabase ${table} upsert failed: ${response.status} ${text}`.trim());
   }
-}
-
-function hasSupabase() {
-  return Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
-}
-
-function supabaseBaseUrl() {
-  return process.env.SUPABASE_URL.replace(/\/$/, "");
-}
-
-function supabaseHeaders() {
-  return {
-    apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-    authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`
-  };
 }
 
 function difficultyForDate(date) {

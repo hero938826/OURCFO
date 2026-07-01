@@ -1,5 +1,5 @@
 const tasks = {
-  "cio-briefing": async () => {
+  "cio-briefing": async () => runScheduledOnce("cio-briefing", async () => {
     const { runDailyBriefing } = require("../api/_cio.js");
     const report = await runDailyBriefing({ send: true, save: true });
     return {
@@ -7,8 +7,8 @@ const tasks = {
       qqqZone: report.qqq.zone,
       actionCard: report.actionCard
     };
-  },
-  "economy-lesson": async () => {
+  }),
+  "economy-lesson": async () => runScheduledOnce("economy-lesson", async () => {
     const { runEconomyLesson } = require("../api/_economy-lesson.js");
     const lesson = await runEconomyLesson({ send: true, save: true });
     return {
@@ -16,8 +16,8 @@ const tasks = {
       terms: lesson.terms,
       difficulty: lesson.difficulty
     };
-  },
-  "nasdaq-drawdowns": async () => {
+  }),
+  "nasdaq-drawdowns": async () => runScheduledOnce("nasdaq-drawdowns", async () => {
     const { runNasdaqDrawdownScan } = require("../api/_nasdaq-drawdowns.js");
     const report = await runNasdaqDrawdownScan({ send: true });
     return {
@@ -26,7 +26,7 @@ const tasks = {
       rows: report.rows.length,
       top: report.rows.slice(0, 3).map((item) => item.symbol)
     };
-  },
+  }),
   "condition-alerts": async () => {
     const { runConditionAlerts } = require("../api/_cio.js");
     const result = await runConditionAlerts({ send: true, save: true });
@@ -51,7 +51,9 @@ const tasks = {
   },
   "ensure-reports-storage": async () => {
     const bucket = process.env.OURCFO_REPORTS_BUCKET || "ourcfo-reports";
-    const base = requiredEnv("SUPABASE_URL").replace(/\/$/, "");
+    requiredEnv("SUPABASE_URL");
+    const { supabaseBaseUrl } = require("../api/_supabase.js");
+    const base = supabaseBaseUrl();
     const key = requiredEnv("SUPABASE_SERVICE_ROLE_KEY");
     const headers = {
       apikey: key,
@@ -100,6 +102,21 @@ const tasks = {
     }
 
     return { bucket, visibility: "private", action: "already-ready" };
+  },
+  "morning-notifications": async () => {
+    const now = kstNowParts();
+    const dueTasks = morningDueTasks(now);
+    const results = [];
+
+    for (const taskName of dueTasks) {
+      results.push({ taskName, result: await tasks[taskName]() });
+    }
+
+    return {
+      kstTime: now.label,
+      dueTasks,
+      sentOrSkipped: results
+    };
   }
 };
 
@@ -107,6 +124,33 @@ function requiredEnv(name) {
   const value = process.env[name];
   if (!value) throw new Error(`${name} is required.`);
   return value;
+}
+
+async function runScheduledOnce(taskName, fn) {
+  if (process.env.GITHUB_EVENT_NAME !== "schedule") return fn();
+
+  const now = kstNowParts();
+  const markerKey = `scheduled:${taskName}:${now.date}`;
+  const { alertExists, saveAlert } = require("../api/_cio-storage.js");
+
+  if (await alertExists(markerKey)) {
+    return { skipped: true, reason: "Already sent today", markerKey, kstTime: now.label };
+  }
+
+  const result = await fn();
+  await saveAlert({
+    alert_key: markerKey,
+    report_date: now.date,
+    type: "schedule-marker",
+    severity: "info",
+    title: `OurCFO ${taskName} sent`,
+    message: `${taskName} sent at ${now.label}`,
+    payload: { taskName, result },
+    triggered_at: new Date().toISOString(),
+    sent_at: new Date().toISOString()
+  }).catch(() => {});
+
+  return result;
 }
 
 async function main() {
@@ -149,6 +193,15 @@ function scheduledTaskGuard(taskName) {
   };
 }
 
+function morningDueTasks(now = kstNowParts()) {
+  const minuteOfDay = now.hour * 60 + now.minute;
+  const due = [];
+  if (minuteOfDay >= 8 * 60 && minuteOfDay <= 8 * 60 + 29) due.push("cio-briefing");
+  if (minuteOfDay >= 8 * 60 + 30 && minuteOfDay <= 8 * 60 + 59) due.push("nasdaq-drawdowns");
+  if (minuteOfDay >= 9 * 60 && minuteOfDay <= 9 * 60 + 59) due.push("economy-lesson");
+  return due;
+}
+
 function kstNowParts() {
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat("en-CA", {
@@ -165,6 +218,7 @@ function kstNowParts() {
   );
 
   return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
     hour: Number(parts.hour),
     minute: Number(parts.minute),
     label: `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`
