@@ -52,7 +52,8 @@ async function fetchYahooItem(item) {
     url.searchParams.set("includePrePost", "false");
 
     const response = await fetch(url, {
-      headers: { "User-Agent": USER_AGENT, Accept: "application/json" }
+      headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
+      signal: timeoutSignal(8000)
     });
     if (!response.ok) throw new Error(`Yahoo chart failed: ${response.status}`);
 
@@ -101,7 +102,7 @@ async function fetchFredRate(seriesId, key, label) {
   try {
     const url = new URL("https://fred.stlouisfed.org/graph/fredgraph.csv");
     url.searchParams.set("id", seriesId);
-    const response = await fetch(url, { headers: { "User-Agent": USER_AGENT, Accept: "text/csv" } });
+    const response = await fetch(url, { headers: { "User-Agent": USER_AGENT, Accept: "text/csv" }, signal: timeoutSignal(8000) });
     if (!response.ok) throw new Error(`FRED ${seriesId} failed: ${response.status}`);
     const text = await response.text();
     const rows = text
@@ -139,6 +140,10 @@ async function fetchFredRate(seriesId, key, label) {
 function numberOrNull(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function timeoutSignal(ms) {
+  return typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(ms) : undefined;
 }
 
 module.exports = { MARKET_SYMBOLS, collectMarketData, fetchYahooItem };

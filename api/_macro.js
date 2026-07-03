@@ -34,7 +34,7 @@ async function fetchFredSeries(config) {
   try {
     const url = new URL("https://fred.stlouisfed.org/graph/fredgraph.csv");
     url.searchParams.set("id", config.id);
-    const response = await fetch(url, { headers: { "User-Agent": USER_AGENT, Accept: "text/csv" } });
+    const response = await fetch(url, { headers: { "User-Agent": USER_AGENT, Accept: "text/csv" }, signal: timeoutSignal(8000) });
     if (!response.ok) throw new Error(`FRED ${config.id} failed: ${response.status}`);
 
     const text = await response.text();
@@ -79,7 +79,8 @@ async function fetchFredSeries(config) {
 async function fetchFomcCalendar() {
   try {
     const response = await fetch("https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm", {
-      headers: { "User-Agent": USER_AGENT, Accept: "text/html" }
+      headers: { "User-Agent": USER_AGENT, Accept: "text/html" },
+      signal: timeoutSignal(8000)
     });
     if (!response.ok) throw new Error(`FOMC calendar failed: ${response.status}`);
 
@@ -151,6 +152,10 @@ function toIsoDate(monthName, day, year) {
     "December"
   ].indexOf(monthName);
   return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function timeoutSignal(ms) {
+  return typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(ms) : undefined;
 }
 
 module.exports = { collectMacroData };

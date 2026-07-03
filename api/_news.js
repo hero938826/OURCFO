@@ -12,7 +12,10 @@ async function collectNewsData() {
     url.searchParams.set("gl", "US");
     url.searchParams.set("ceid", "US:en");
 
-    const response = await fetch(url, { headers: { "User-Agent": USER_AGENT, Accept: "application/rss+xml" } });
+    const response = await fetch(url, {
+      headers: { "User-Agent": USER_AGENT, Accept: "application/rss+xml" },
+      signal: timeoutSignal(8000)
+    });
     if (!response.ok) throw new Error(`Google News RSS failed: ${response.status}`);
 
     const xml = await response.text();
@@ -129,6 +132,10 @@ function detectCompany(lower) {
   if (lower.includes("meta")) return "메타";
   if (lower.includes("alphabet") || lower.includes("google")) return "알파벳";
   return "";
+}
+
+function timeoutSignal(ms) {
+  return typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(ms) : undefined;
 }
 
 module.exports = { collectNewsData };
