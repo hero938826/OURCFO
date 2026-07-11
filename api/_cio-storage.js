@@ -26,6 +26,20 @@ async function alertExists(alertKey) {
   return Array.isArray(rows) && rows.length > 0;
 }
 
+async function getPreviousCioReport(reportDate) {
+  if (!hasSupabase()) return null;
+  const url = new URL(`${supabaseBaseUrl()}/rest/v1/cio_reports`);
+  url.searchParams.set("select", "report_date,asset_snapshot");
+  url.searchParams.set("report_date", `lt.${reportDate}`);
+  url.searchParams.set("order", "report_date.desc");
+  url.searchParams.set("limit", "1");
+
+  const response = await fetch(url, { headers: supabaseHeaders() });
+  if (!response.ok) return null;
+  const rows = await response.json().catch(() => []);
+  return Array.isArray(rows) && rows.length ? rows[0] : null;
+}
+
 async function saveErrorLog(scope, error) {
   const message = error instanceof Error ? error.message : String(error || "unknown error");
   const row = {
@@ -190,4 +204,4 @@ function csvEscape(value) {
   return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
-module.exports = { alertExists, hasSupabase, saveAlert, saveCioRun, saveErrorLog };
+module.exports = { alertExists, getPreviousCioReport, hasSupabase, saveAlert, saveCioRun, saveErrorLog };

@@ -11,14 +11,26 @@ const FRED_SERIES = [
   { key: "ismManufacturing", id: "NAPM", label: "ISM 제조업지수", unit: "index" }
 ];
 
+const FED_TARGET_SERIES = [
+  { key: "fedTargetLower", id: "DFEDTARL", label: "미국 기준금리 하단", unit: "%" },
+  { key: "fedTargetUpper", id: "DFEDTARU", label: "미국 기준금리 상단", unit: "%" }
+];
+
 async function collectMacroData() {
-  const [series, fomc] = await Promise.all([
+  const [series, targetRange, fomc] = await Promise.all([
     Promise.all(FRED_SERIES.map(fetchFredSeries)),
+    fetchFedTargetRange(),
     fetchFomcCalendar()
   ]);
 
   const byKey = {};
   for (const item of series) byKey[item.key] = item;
+  if (targetRange) {
+    byKey.fedFunds = targetRange;
+    const index = series.findIndex((item) => item.key === "fedFunds");
+    if (index >= 0) series[index] = targetRange;
+    else series.unshift(targetRange);
+  }
 
   return {
     asOf: new Date().toISOString(),
@@ -27,6 +39,37 @@ async function collectMacroData() {
     byKey,
     fomc,
     upcoming: buildUpcoming(fomc)
+  };
+}
+
+async function fetchFedTargetRange() {
+  const [lower, upper] = await Promise.all(FED_TARGET_SERIES.map(fetchFredSeries));
+  const lowerValue = Number(lower?.value);
+  const upperValue = Number(upper?.value);
+  if (!Number.isFinite(lowerValue) && !Number.isFinite(upperValue)) return null;
+
+  const hasLower = Number.isFinite(lowerValue);
+  const hasUpper = Number.isFinite(upperValue);
+  const value = hasLower && hasUpper ? (lowerValue + upperValue) / 2 : hasUpper ? upperValue : lowerValue;
+  const displayValue =
+    hasLower && hasUpper && lowerValue !== upperValue
+      ? `${formatRate(lowerValue)}~${formatRate(upperValue)}%`
+      : `${formatRate(value)}%`;
+
+  return {
+    key: "fedFunds",
+    seriesId: hasLower && hasUpper ? "DFEDTARL/DFEDTARU" : hasUpper ? upper.seriesId : lower.seriesId,
+    label: "미국 기준금리",
+    value,
+    lower: hasLower ? lowerValue : null,
+    upper: hasUpper ? upperValue : null,
+    previousValue: null,
+    change: null,
+    yoyPct: null,
+    unit: "%",
+    displayValue,
+    date: [lower?.date, upper?.date].filter(Boolean).sort().at(-1) || null,
+    source: "FRED"
   };
 }
 
@@ -74,6 +117,12 @@ async function fetchFredSeries(config) {
       error: error instanceof Error ? error.message : "unknown macro error"
     };
   }
+}
+
+function formatRate(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "확인 필요";
+  return number.toFixed(2).replace(/\.00$/, "");
 }
 
 async function fetchFomcCalendar() {

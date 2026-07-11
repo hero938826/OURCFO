@@ -2,7 +2,7 @@ const { budgetSummary, loadState, snapshots } = require("./_data.js");
 const { collectMarketData } = require("./_market.js");
 const { collectMacroData } = require("./_macro.js");
 const { collectNewsData } = require("./_news.js");
-const { alertExists, saveAlert, saveCioRun } = require("./_cio-storage.js");
+const { alertExists, getPreviousCioReport, saveAlert, saveCioRun } = require("./_cio-storage.js");
 const { sendTelegramMessage } = require("./_telegram.js");
 
 require("./_env.js").loadLocalEnv();
@@ -34,23 +34,25 @@ const GROWTH_TICKERS = new Set([
 async function buildCioReport() {
   const state = await loadState();
   const extraSymbols = state.stockHoldings.map((item) => item.ticker);
-  const [market, macro, news] = await Promise.all([
+  const reportDate = kstDate();
+  const [market, macro, news, previousReport] = await Promise.all([
     collectMarketData(extraSymbols),
     collectMacroData(),
-    collectNewsData()
+    collectNewsData(),
+    getPreviousCioReport(reportDate)
   ]);
 
   const fxRate = market.byKey.USDKRW?.price || 1380;
   const snapshot = snapshots(state, { fxRate });
   const budget = budgetSummary(state);
-  const assets = analyzeAssets(state, snapshot, budget, market);
+  const assets = analyzeAssets(state, snapshot, budget, market, previousReport);
   const qqq = analyzeQqq(market.byKey.QQQ);
   const cioOpinion = buildCioOpinion({ qqq, assets, market, macro });
   const actionCard = buildActionCard({ qqq, assets, market });
   const message = formatTelegramMessage({ assets, market, macro, news, qqq, cioOpinion, actionCard });
 
   return {
-    reportDate: kstDate(),
+    reportDate,
     generatedAt: new Date().toISOString(),
     assets,
     market,
@@ -90,7 +92,7 @@ async function runConditionAlerts({ send = true, save = true } = {}) {
   return { reportDate: report.reportDate, checked: alerts.length, sent };
 }
 
-function analyzeAssets(state, snapshot, budget, market) {
+function analyzeAssets(state, snapshot, budget, market, previousReport = null) {
   const holdings = state.stockHoldings || [];
   const fxRate = market.byKey.USDKRW?.price || 1380;
   const marketValueByTicker = {};
@@ -126,9 +128,17 @@ function analyzeAssets(state, snapshot, budget, market) {
   const sp500 = sumTickers(marketValueByTicker, SP500_TICKERS);
   const leveraged = sumTickers(marketValueByTicker, LEVERAGED_TICKERS);
 
+  const previousReportAssets = previousReport?.asset_snapshot || previousReport?.assetSnapshot || null;
+  const previousTotalAssets = Number(previousReportAssets?.totalAssets ?? previousReportAssets?.netWorth);
   const previousClose = latestPreviousClose(state.monthlyClosings, budget.month);
-  const previousNetWorth = previousClose?.netWorth || null;
-  const dailyChange = previousNetWorth ? netWorth - previousNetWorth : null;
+  const previousNetWorth = Number.isFinite(previousTotalAssets) && previousTotalAssets > 0 ? previousTotalAssets : Number(previousClose?.netWorth);
+  const dailyChange = Number.isFinite(previousNetWorth) && previousNetWorth > 0 ? netWorth - previousNetWorth : null;
+  const dailyChangeBasis =
+    Number.isFinite(previousTotalAssets) && previousTotalAssets > 0
+      ? `previous_report:${previousReport.report_date}`
+      : previousClose
+        ? "monthly_close"
+        : "none";
 
   return {
     totalAssets,
@@ -145,6 +155,7 @@ function analyzeAssets(state, snapshot, budget, market) {
     monthlyExpense: budget.totals.expense,
     variableExpense: budget.totals.variableExpense,
     dailyChange,
+    dailyChangeBasis,
     growthStockWeight: stockValue ? (growthStock / stockValue) * 100 : 0,
     sp500Weight: stockValue ? (sp500 / stockValue) * 100 : 0,
     leverageWeight: stockValue ? (leveraged / stockValue) * 100 : 0,
@@ -176,7 +187,7 @@ function buildCioOpinion({ qqq, assets, market, macro }) {
   lines.push(`현금비중은 ${fmtPct(assets.cashWeight)}로, 급락 구간 대응력을 함께 점검하세요.`);
   lines.push(`레버리지 비중은 ${fmtPct(assets.leverageWeight)}입니다. TQQQ/QLD/SOXL은 정해둔 구간에서만 증액하는 원칙이 좋습니다.`);
   if (market.byKey.USDKRW?.price >= 1450) lines.push("원달러 환율이 높은 편이라 신규 환전은 분할 접근이 유리합니다.");
-  if (macro.byKey.fedFunds?.value) lines.push(`미국 기준금리는 약 ${fmtNumber(macro.byKey.fedFunds.value)}% 수준입니다. 금리 방향보다 적립 리듬 유지가 중요합니다.`);
+  if (macro.byKey.fedFunds?.value) lines.push(`미국 기준금리는 약 ${fmtFedFunds(macro.byKey.fedFunds)} 수준입니다. 금리 방향보다 적립 리듬 유지가 중요합니다.`);
   return lines.slice(0, 5);
 }
 
@@ -193,17 +204,6 @@ function buildActionCard({ qqq, assets, market }) {
 function buildConditionAlerts(report) {
   const today = report.reportDate;
   const alerts = [];
-  const drawdown = report.qqq.drawdownPct;
-
-  [
-    { limit: -15, label: "QQQ 전고점 대비 -15% 도달", severity: "warning" },
-    { limit: -20, label: "QQQ 전고점 대비 -20% 도달", severity: "danger" },
-    { limit: -30, label: "QQQ 전고점 대비 -30% 도달", severity: "critical" }
-  ].forEach((rule) => {
-    if (Number.isFinite(drawdown) && drawdown <= rule.limit) {
-      alerts.push(conditionAlert(today, `qqq:${rule.limit}`, rule.severity, rule.label, `현재 QQQ 전고점 대비 ${fmtPct(drawdown)}입니다.`));
-    }
-  });
 
   const vix = report.market.byKey.VIX?.price;
   if (vix >= 30) alerts.push(conditionAlert(today, "vix:30", "danger", "VIX 30 이상", `현재 VIX는 ${fmtNumber(vix)}입니다.`));
@@ -238,7 +238,7 @@ function formatTelegramMessage({ assets, market, macro, news, qqq, cioOpinion, a
   line.push("");
   line.push("💰 우리집 자산");
   line.push(`총자산: ${fmtKrw(assets.totalAssets)}`);
-  line.push("전일대비: 월마감 데이터 기준 확인 필요");
+  line.push(`전일대비: ${Number.isFinite(Number(assets.dailyChange)) ? fmtSignedKrw(assets.dailyChange) : "전일 리포트 없음"}`);
   line.push(`주식비중: ${fmtPct(assets.stockWeight)}`);
   line.push(`ISA: ${fmtKrw(assets.isa)}`);
   line.push(`연금저축: ${fmtKrw(assets.pension)}`);
@@ -261,7 +261,7 @@ function formatTelegramMessage({ assets, market, macro, news, qqq, cioOpinion, a
   line.push(`USD/KRW: ${fmtNumber(market.byKey.USDKRW?.price)}원 (${fmtPct(market.byKey.USDKRW?.changePct, true)})`);
   line.push("");
   line.push("🏦 금리");
-  line.push(`미국 기준금리: ${fmtNumber(macro.byKey.fedFunds?.value)}%`);
+  line.push(`미국 기준금리: ${fmtFedFunds(macro.byKey.fedFunds)}`);
   line.push(`10년물: ${fmtNumber(market.byKey.US10Y?.price)}%`);
   line.push(`2년물: ${fmtNumber(market.byKey.US2Y?.price)}%`);
   line.push(`최근 FOMC: ${macro.fomc?.recentResult || "확인 필요"}`);
@@ -389,6 +389,13 @@ function fmtNumber(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return "확인 필요";
   return number >= 1000 ? Math.round(number).toLocaleString("ko-KR") : number.toFixed(2).replace(/\.00$/, "");
+}
+
+function fmtFedFunds(item) {
+  if (!item) return "확인 필요";
+  if (item.displayValue) return item.displayValue;
+  if (!Number.isFinite(Number(item.value))) return "확인 필요";
+  return `${fmtNumber(item.value)}%`;
 }
 
 function kstDate() {
