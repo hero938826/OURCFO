@@ -43,6 +43,10 @@ async function collectMacroData() {
 }
 
 async function fetchFedTargetRange() {
+  return (await fetchFedTargetRangeFromFred()) || (await fetchFedTargetRangeFromNyFed());
+}
+
+async function fetchFedTargetRangeFromFred() {
   const [lower, upper] = await Promise.all(FED_TARGET_SERIES.map(fetchFredSeries));
   const lowerValue = Number(lower?.value);
   const upperValue = Number(upper?.value);
@@ -71,6 +75,49 @@ async function fetchFedTargetRange() {
     date: [lower?.date, upper?.date].filter(Boolean).sort().at(-1) || null,
     source: "FRED"
   };
+}
+
+async function fetchFedTargetRangeFromNyFed() {
+  try {
+    const response = await fetch("https://markets.newyorkfed.org/api/rates/unsecured/effr/last/1.json", {
+      headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
+      signal: timeoutSignal(8000)
+    });
+    if (!response.ok) throw new Error(`NY Fed EFFR failed: ${response.status}`);
+
+    const data = await response.json();
+    const latest = Array.isArray(data?.refRates) ? data.refRates[0] : null;
+    const lower = Number(latest?.targetRateFrom);
+    const upper = Number(latest?.targetRateTo);
+    const effective = Number(latest?.percentRate);
+    if (!Number.isFinite(lower) && !Number.isFinite(upper) && !Number.isFinite(effective)) return null;
+
+    const value = Number.isFinite(lower) && Number.isFinite(upper) ? (lower + upper) / 2 : effective;
+    const displayValue =
+      Number.isFinite(lower) && Number.isFinite(upper)
+        ? lower === upper
+          ? `${formatRate(lower)}%`
+          : `${formatRate(lower)}~${formatRate(upper)}%`
+        : `${formatRate(value)}%`;
+
+    return {
+      key: "fedFunds",
+      seriesId: "NYFED_EFFR",
+      label: "미국 기준금리",
+      value,
+      lower: Number.isFinite(lower) ? lower : null,
+      upper: Number.isFinite(upper) ? upper : null,
+      previousValue: null,
+      change: null,
+      yoyPct: null,
+      unit: "%",
+      displayValue,
+      date: latest?.effectiveDate || null,
+      source: "New York Fed"
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function fetchFredSeries(config) {
