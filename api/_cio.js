@@ -2,7 +2,7 @@ const { budgetSummary, loadState, snapshots } = require("./_data.js");
 const { collectMarketData } = require("./_market.js");
 const { collectMacroData } = require("./_macro.js");
 const { collectNewsData } = require("./_news.js");
-const { alertExists, getPreviousCioReport, saveAlert, saveCioRun } = require("./_cio-storage.js");
+const { alertExists, saveAlert, saveCioRun } = require("./_cio-storage.js");
 const { sendTelegramMessage } = require("./_telegram.js");
 
 require("./_env.js").loadLocalEnv();
@@ -35,17 +35,16 @@ async function buildCioReport() {
   const state = await loadState();
   const extraSymbols = state.stockHoldings.map((item) => item.ticker);
   const reportDate = kstDate();
-  const [market, macro, news, previousReport] = await Promise.all([
+  const [market, macro, news] = await Promise.all([
     collectMarketData(extraSymbols),
     collectMacroData(),
-    collectNewsData(),
-    getPreviousCioReport(reportDate)
+    collectNewsData()
   ]);
 
   const fxRate = market.byKey.USDKRW?.price || 1380;
   const snapshot = snapshots(state, { fxRate });
   const budget = budgetSummary(state);
-  const assets = analyzeAssets(state, snapshot, budget, market, previousReport);
+  const assets = analyzeAssets(state, snapshot, budget, market);
   const qqq = analyzeQqq(market.byKey.QQQ);
   const cioOpinion = buildCioOpinion({ qqq, assets, market, macro });
   const actionCard = buildActionCard({ qqq, assets, market });
@@ -92,7 +91,7 @@ async function runConditionAlerts({ send = true, save = true } = {}) {
   return { reportDate: report.reportDate, checked: alerts.length, sent };
 }
 
-function analyzeAssets(state, snapshot, budget, market, previousReport = null) {
+function analyzeAssets(state, snapshot, budget, market) {
   const holdings = state.stockHoldings || [];
   const fxRate = market.byKey.USDKRW?.price || 1380;
   const marketValueByTicker = {};
@@ -128,17 +127,10 @@ function analyzeAssets(state, snapshot, budget, market, previousReport = null) {
   const sp500 = sumTickers(marketValueByTicker, SP500_TICKERS);
   const leveraged = sumTickers(marketValueByTicker, LEVERAGED_TICKERS);
 
-  const previousReportAssets = previousReport?.asset_snapshot || previousReport?.assetSnapshot || null;
-  const previousTotalAssets = Number(previousReportAssets?.totalAssets ?? previousReportAssets?.netWorth);
   const previousClose = latestPreviousClose(state.monthlyClosings, budget.month);
-  const previousNetWorth = Number.isFinite(previousTotalAssets) && previousTotalAssets > 0 ? previousTotalAssets : Number(previousClose?.netWorth);
-  const dailyChange = Number.isFinite(previousNetWorth) && previousNetWorth > 0 ? netWorth - previousNetWorth : null;
-  const dailyChangeBasis =
-    Number.isFinite(previousTotalAssets) && previousTotalAssets > 0
-      ? `previous_report:${previousReport.report_date}`
-      : previousClose
-        ? "monthly_close"
-        : "none";
+  const previousNetWorth = Number(previousClose?.netWorth);
+  const monthlyChange = Number.isFinite(previousNetWorth) && previousNetWorth > 0 ? netWorth - previousNetWorth : null;
+  const monthlyChangeBasis = previousClose ? "monthly_close" : "none";
 
   return {
     totalAssets,
@@ -154,8 +146,10 @@ function analyzeAssets(state, snapshot, budget, market, previousReport = null) {
     heroKakaoPension,
     monthlyExpense: budget.totals.expense,
     variableExpense: budget.totals.variableExpense,
-    dailyChange,
-    dailyChangeBasis,
+    dailyChange: monthlyChange,
+    dailyChangeBasis: monthlyChangeBasis,
+    monthlyChange,
+    monthlyChangeBasis,
     growthStockWeight: stockValue ? (growthStock / stockValue) * 100 : 0,
     sp500Weight: stockValue ? (sp500 / stockValue) * 100 : 0,
     leverageWeight: stockValue ? (leveraged / stockValue) * 100 : 0,
@@ -238,7 +232,7 @@ function formatTelegramMessage({ assets, market, macro, news, qqq, cioOpinion, a
   line.push("");
   line.push("💰 우리집 자산");
   line.push(`총자산: ${fmtKrw(assets.totalAssets)}`);
-  line.push(`전일대비: ${Number.isFinite(Number(assets.dailyChange)) ? fmtSignedKrw(assets.dailyChange) : "전일 리포트 없음"}`);
+  line.push(`전월대비: ${Number.isFinite(Number(assets.monthlyChange)) ? fmtSignedKrw(assets.monthlyChange) : "전월 데이터 없음"}`);
   line.push(`주식비중: ${fmtPct(assets.stockWeight)}`);
   line.push(`ISA: ${fmtKrw(assets.isa)}`);
   line.push(`연금저축: ${fmtKrw(assets.pension)}`);
