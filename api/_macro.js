@@ -77,6 +77,7 @@ async function fetchFredSeries(config) {
   try {
     const url = new URL("https://fred.stlouisfed.org/graph/fredgraph.csv");
     url.searchParams.set("id", config.id);
+    url.searchParams.set("cosd", `${new Date().getUTCFullYear() - 2}-01-01`);
     const response = await fetch(url, { headers: { "User-Agent": USER_AGENT, Accept: "text/csv" }, signal: timeoutSignal(8000) });
     if (!response.ok) throw new Error(`FRED ${config.id} failed: ${response.status}`);
 
